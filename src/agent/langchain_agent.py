@@ -18,6 +18,7 @@ from src.agent.prompts import (
     get_procurement_system_prompt,
 )
 from src.utils.logging import get_logger
+from src.utils.error_sanitizer import ErrorSanitizer
 
 logger = get_logger(__name__)
 
@@ -410,9 +411,10 @@ class OdooAgent:
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
+            sanitized_error = ErrorSanitizer.sanitize(str(e))
             return {
                 "type": "error",
-                "content": f"Sorry, I encountered an error: {str(e)}",
+                "content": f"Sorry, I encountered an error: {sanitized_error}",
             }
 
     async def _handle_query(
@@ -498,9 +500,10 @@ class OdooAgent:
 
         except Exception as e:
             logger.error(f"Error in query: {e}")
+            sanitized_error = ErrorSanitizer.sanitize(str(e))
             return {
                 "type": "error",
-                "content": f"Error querying {model}: {str(e)}",
+                "content": f"Error querying {model}: {sanitized_error}",
             }
 
     async def _handle_create(
@@ -778,10 +781,11 @@ What would you like to do?"""
 
         except Exception as e:
             logger.error(f"Error executing action: {e}")
+            sanitized_error = ErrorSanitizer.sanitize(str(e))
             return {
                 "success": False,
-                "content": f"Error executing action: {str(e)}",
-                "error": str(e),
+                "content": f"Error executing action: {sanitized_error}",
+                "error": sanitized_error,
             }
 
     def clear_history(self):
