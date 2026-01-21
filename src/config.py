@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     anthropic_base_url: Optional[str] = Field(default=None, alias="ANTHROPIC_BASE_URL")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
-    llm_provider: str = Field(default="anthropic", alias="LLM_PROVIDER")
-    llm_model: str = Field(default="claude-sonnet-4-20250514", alias="LLM_MODEL")
+    llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
+    llm_model: str = Field(default="gpt-4o", alias="LLM_MODEL")
     llm_temperature: float = Field(default=0.0, alias="LLM_TEMPERATURE")
 
     # Service Configuration
