@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from src.utils.logging import get_logger
+from src.utils.field_selector import SmartFieldSelector
 
 logger = get_logger(__name__)
 
@@ -310,19 +311,43 @@ class OdooModelDiscovery:
             logger.error(f"Error in get_model_fields for {model_name}: {e}")
             return {}
 
-    def get_safe_fields(self, model_name: str) -> List[str]:
+    def get_safe_fields(self, model_name: str, use_smart_selector: bool = True) -> List[str]:
         """
         Get a list of "safe" fields for a model that won't trigger access errors.
 
-        Uses predefined common fields for standard Odoo models to avoid
-        permission errors on related models.
+        First tries to use SmartFieldSelector with dynamic field metadata.
+        Falls back to predefined common fields for standard Odoo models.
 
         Args:
             model_name: Name of the model
+            use_smart_selector: Try to use SmartFieldSelector with dynamic fields
 
         Returns:
             List of safe field names
         """
+        # Try SmartFieldSelector first if enabled
+        if use_smart_selector:
+            try:
+                fields_data = self.odoo.get_model_fields(model_name)
+                if fields_data and "error" not in fields_data:
+                    # Convert to format expected by SmartFieldSelector
+                    fields_info = {}
+                    for field_name, field_meta in fields_data.items():
+                        fields_info[field_name] = {
+                            "type": field_meta.get("type", "unknown"),
+                            "required": field_meta.get("required", False),
+                            "store": field_meta.get("store", True),
+                            "searchable": field_meta.get("searchable", False),
+                        }
+
+                    # Use SmartFieldSelector to pick best fields
+                    selected = SmartFieldSelector.select(fields_info, limit=15)
+                    if selected:
+                        logger.debug(f"SmartFieldSelector selected {len(selected)} fields for {model_name}")
+                        return selected
+            except Exception as e:
+                logger.debug(f"SmartFieldSelector failed for {model_name}, using fallback: {e}")
+
         # Predefined safe fields for common Odoo models
         # These are standard fields that exist in most Odoo installations
         # and don't trigger permission errors on related models
