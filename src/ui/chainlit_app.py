@@ -178,19 +178,22 @@ I'll always ask for confirmation before making changes.
 
         await cl.Message(content=welcome_message).send()
 
-        # Show available models (with fallback)
+        # Show available models (with fallback to discovery)
         try:
             models_info = odoo_client.get_models()
             model_count = len(models_info.get("model_names", []))
-            await cl.Message(
-                content=f"Ready! I have access to **{model_count}** models in your Odoo instance."
-            ).send()
+            if model_count > 0:
+                await cl.Message(
+                    content=f"Ready! I have access to **{model_count}** models in your Odoo instance."
+                ).send()
+            else:
+                raise ValueError("No models returned from ir.model")
         except Exception as models_err:
-            # Fallback to default models when ir.model is not accessible
-            logger.warning(f"Cannot access ir.model, using default models: {models_err}")
+            # Fallback to discovery's default models when ir.model is not accessible
+            logger.warning(f"Cannot access ir.model, using discovery models: {models_err}")
             model_count = len(discovery.get_all_models())
             await cl.Message(
-                content=f"Ready! I have access to **{model_count}** standard Odoo models."
+                content=f"Ready! Using **{model_count}** standard Odoo models (limited API access)."
             ).send()
 
     except Exception as e:
