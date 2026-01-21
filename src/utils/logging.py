@@ -3,10 +3,12 @@ Logging configuration for Odoo AI Agent
 """
 import json
 import sys
+import time
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Generator, Optional
 
 from loguru import logger
 
@@ -216,3 +218,31 @@ def get_session_logger(session_id: str, thread_id: Optional[str] = None):
     """
     set_session_context(session_id=session_id, thread_id=thread_id)
     return logger.bind(session_id=session_id[:8] if session_id else "-")
+
+
+@contextmanager
+def log_timing(operation: str, **extra) -> Generator[None, None, None]:
+    """
+    Context manager for timing operations.
+
+    Args:
+        operation: Name of the operation being timed
+        **extra: Additional context to include in the log
+
+    Yields:
+        None
+
+    Example:
+        with log_timing("odoo_search_read", model="res.partner"):
+            results = client.search_read(...)
+    """
+    start = time.time()
+    try:
+        yield
+    finally:
+        duration_ms = (time.time() - start) * 1000
+        extra_str = ", ".join(f"{k}={v}" for k, v in extra.items())
+        if extra_str:
+            logger.debug(f"[TIMING] {operation} ({extra_str}): {duration_ms:.2f}ms")
+        else:
+            logger.debug(f"[TIMING] {operation}: {duration_ms:.2f}ms")
