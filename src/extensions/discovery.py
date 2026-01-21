@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, log_timing
 from src.utils.field_selector import SmartFieldSelector
 from src.utils.cache import TTLCache
 
@@ -189,7 +189,8 @@ class OdooModelDiscovery:
 
         try:
             # Try to get models dynamically
-            models_info = self.odoo.get_models()
+            with log_timing("odoo_get_models"):
+                models_info = self.odoo.get_models()
 
             if "error" in models_info:
                 error_msg = str(models_info.get('error', ''))
@@ -279,7 +280,8 @@ class OdooModelDiscovery:
         logger.debug(f"Discovering fields for {model_name}...")
 
         try:
-            fields_data = self.odoo.get_model_fields(model_name)
+            with log_timing("odoo_get_model_fields", model=model_name):
+                fields_data = self.odoo.get_model_fields(model_name)
 
             if "error" in fields_data:
                 logger.error(f"Error getting fields for {model_name}: {fields_data['error']}")
@@ -332,7 +334,8 @@ class OdooModelDiscovery:
         # Try SmartFieldSelector first if enabled
         if use_smart_selector:
             try:
-                fields_data = self.odoo.get_model_fields(model_name)
+                with log_timing("odoo_get_model_fields_for_selector", model=model_name):
+                    fields_data = self.odoo.get_model_fields(model_name)
                 if fields_data and "error" not in fields_data:
                     # Convert to format expected by SmartFieldSelector
                     fields_info = {}

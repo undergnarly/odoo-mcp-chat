@@ -17,7 +17,7 @@ from src.agent.prompts import (
     get_query_generator_prompt,
     get_procurement_system_prompt,
 )
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, log_timing
 from src.utils.error_sanitizer import ErrorSanitizer
 
 logger = get_logger(__name__)
@@ -455,7 +455,8 @@ class OdooAgent:
 
             # Get total count first
             try:
-                total_count = self.odoo.execute_method(model, "search_count", filters)
+                with log_timing("odoo_search_count", model=model):
+                    total_count = self.odoo.execute_method(model, "search_count", filters)
             except Exception:
                 total_count = None
 
@@ -463,12 +464,13 @@ class OdooAgent:
             limit = parameters.get("limit", 100)
 
             # Execute search with explicit fields
-            results = self.odoo.search_read(
-                model_name=model,
-                domain=filters,  # Now guaranteed to be a list
-                fields=safe_fields,  # Only fetch safe fields
-                limit=limit,
-            )
+            with log_timing("odoo_search_read", model=model, limit=limit):
+                results = self.odoo.search_read(
+                    model_name=model,
+                    domain=filters,  # Now guaranteed to be a list
+                    fields=safe_fields,  # Only fetch safe fields
+                    limit=limit,
+                )
 
             # Format results for display
             if results:
@@ -723,7 +725,8 @@ What would you like to do?"""
                         "content": "Missing model or values for create operation",
                     }
 
-                new_id = self.odoo.execute_method(model, "create", [values])
+                with log_timing("odoo_create", model=model):
+                    new_id = self.odoo.execute_method(model, "create", [values])
                 return {
                     "success": True,
                     "content": f"Successfully created new {model} record with ID: {new_id}",
@@ -737,7 +740,8 @@ What would you like to do?"""
                         "content": "Missing model, record_id, or values for update operation",
                     }
 
-                self.odoo.execute_method(model, "write", [[record_id], values])
+                with log_timing("odoo_write", model=model, record_id=record_id):
+                    self.odoo.execute_method(model, "write", [[record_id], values])
                 return {
                     "success": True,
                     "content": f"Successfully updated {model} record {record_id}",
@@ -751,7 +755,8 @@ What would you like to do?"""
                         "content": "Missing model or record_id for delete operation",
                     }
 
-                self.odoo.execute_method(model, "unlink", [[record_id]])
+                with log_timing("odoo_unlink", model=model, record_id=record_id):
+                    self.odoo.execute_method(model, "unlink", [[record_id]])
                 return {
                     "success": True,
                     "content": f"Successfully deleted {model} record {record_id}",
@@ -765,7 +770,8 @@ What would you like to do?"""
                         "content": "Missing model, record_id, or method for action operation",
                     }
 
-                result = self.odoo.execute_method(model, method, [[record_id]])
+                with log_timing("odoo_action", model=model, method=method, record_id=record_id):
+                    result = self.odoo.execute_method(model, method, [[record_id]])
                 return {
                     "success": True,
                     "content": f"Successfully executed {method} on {model} record {record_id}",
