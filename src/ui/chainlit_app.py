@@ -24,6 +24,13 @@ from src.utils.logging import (
 from odoo_mcp.odoo_client import get_odoo_client
 from src.agent.langchain_agent import OdooAgent
 from src.extensions.discovery import OdooModelDiscovery
+from src.ui.data_layer import (
+    create_data_layer,
+    init_database,
+    register_user,
+    authenticate_user,
+    user_exists,
+)
 
 # Setup logging
 logger_instance = setup_logging()
@@ -32,6 +39,62 @@ logger = get_logger(__name__)
 # Global variables
 agent: Optional[OdooAgent] = None
 settings = get_settings()
+
+
+@cl.data_layer
+def get_data_layer():
+    """Provide data layer for chat history persistence"""
+    import asyncio
+    # Initialize database schema synchronously at startup
+    asyncio.get_event_loop().run_until_complete(init_database())
+    return create_data_layer()
+
+
+@cl.password_auth_callback
+async def auth_callback(username: str, password: str):
+    """
+    Password authentication with registration support.
+    - If username starts with 'new:' - register new user
+    - Otherwise authenticate existing user
+    """
+    # Handle registration: prefix username with "new:" to register
+    if username.startswith("new:"):
+        actual_username = username[4:]  # Remove "new:" prefix
+        if not actual_username or not password:
+            return None
+
+        # Check if user already exists
+        if await user_exists(actual_username):
+            logger.warning(f"Registration failed: user {actual_username} already exists")
+            return None
+
+        # Register new user
+        if await register_user(actual_username, password):
+            logger.info(f"New user registered: {actual_username}")
+            return cl.User(
+                identifier=actual_username,
+                metadata={"role": "user", "provider": "credentials"}
+            )
+        return None
+
+    # Normal authentication
+    if await authenticate_user(username, password):
+        return cl.User(
+            identifier=username,
+            metadata={"role": "user", "provider": "credentials"}
+        )
+
+    # Fallback to env-based admin auth for initial setup
+    expected_user = os.environ.get("CHAINLIT_AUTH_USER", "admin")
+    expected_pass = os.environ.get("CHAINLIT_AUTH_PASSWORD", "admin")
+
+    if username == expected_user and password == expected_pass:
+        return cl.User(
+            identifier=username,
+            metadata={"role": "admin", "provider": "credentials"}
+        )
+
+    return None
 
 
 @cl.on_chat_start
@@ -47,16 +110,35 @@ async def on_chat_start():
     logger.info(f"Starting new chat session. Thread: {thread_id}")
 
     try:
+        # Get user-provided environment variables from Chainlit
+        user_env = cl.user_session.get("user_env") or {}
+
+        # Set environment variables from user_env for odoo_client and openai
+        # This allows the existing code to work without modification
+        env_vars = ["OPENAI_API_KEY", "ODOO_URL", "ODOO_DB", "ODOO_USERNAME", "ODOO_PASSWORD"]
+        for var in env_vars:
+            if var in user_env and user_env[var]:
+                os.environ[var] = user_env[var]
+
+        # Get connection info for display
+        odoo_url = user_env.get("ODOO_URL") or os.environ.get("ODOO_URL", "Not configured")
+        odoo_db = user_env.get("ODOO_DB") or os.environ.get("ODOO_DB", "Not configured")
+
         # Initialize Odoo client
         odoo_client = get_odoo_client()
         logger.info("Odoo client initialized")
 
+        # Store odoo_client in session for later use
+        cl.user_session.set("odoo_client", odoo_client)
+
         # Initialize discovery service
         discovery = OdooModelDiscovery(odoo_client, cache_ttl=300)
+        cl.user_session.set("discovery", discovery)
 
         # Initialize agent
         global agent
         agent = OdooAgent(odoo_client, discovery)
+        cl.user_session.set("agent", agent)
 
         # Send welcome message
         welcome_message = f"""
@@ -90,8 +172,8 @@ I'll always ask for confirmation before making changes.
 
 ---
 
-**Connected to:** {settings.odoo_url}
-**Database:** {settings.odoo_db}
+**Connected to:** {odoo_url}
+**Database:** {odoo_db}
         """
 
         await cl.Message(content=welcome_message).send()
@@ -113,8 +195,13 @@ I'll always ask for confirmation before making changes.
 
     except Exception as e:
         logger.error(f"Error initializing chat: {e}")
+        log_chat_error(
+            error_type="initialization",
+            error_message=str(e),
+            stack_trace=traceback.format_exc(),
+        )
         await cl.Message(
-            content=f"Error initializing: {str(e)}\n\nPlease check your configuration."
+            content=f"Error initializing: {str(e)}\n\nPlease check your Odoo connection settings."
         ).send()
 
 

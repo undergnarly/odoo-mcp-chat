@@ -49,8 +49,9 @@ logs/
 htmlcov/
 .tox/
 
-# Chainlit
-.chainlit/
+# Chainlit session data (but keep config.toml)
+.chainlit/*.db
+.chainlit/translations/
 
 # Odoo config (contains credentials)
 odoo_config.json
