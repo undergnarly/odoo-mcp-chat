@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from src.utils.logging import get_logger
 from src.utils.field_selector import SmartFieldSelector
+from src.utils.cache import TTLCache
 
 logger = get_logger(__name__)
 
@@ -129,10 +130,11 @@ class OdooModelDiscovery:
         self.odoo = odoo_client
         self.cache_ttl = cache_ttl
 
-        # Cache storage
+        # Cache storage - using TTLCache for fields with automatic expiration
         self._models_cache: Optional[Dict[str, ModelMetadata]] = None
         self._cache_timestamp: Optional[datetime] = None
-        self._fields_cache: Dict[str, Dict[str, FieldMetadata]] = {}
+        self._fields_cache = TTLCache(ttl_seconds=cache_ttl, max_size=100)
+        self._safe_fields_cache = TTLCache(ttl_seconds=cache_ttl, max_size=100)
 
         logger.info(f"OdooModelDiscovery initialized with cache_ttl={cache_ttl}s")
 
@@ -267,10 +269,12 @@ class OdooModelDiscovery:
         Returns:
             Dictionary mapping field names to FieldMetadata
         """
-        # Check cache
-        if not force_refresh and model_name in self._fields_cache:
-            logger.debug(f"Using cached fields for {model_name}")
-            return self._fields_cache[model_name]
+        # Check TTLCache (automatically handles TTL expiration)
+        if not force_refresh:
+            cached = self._fields_cache.get(model_name)
+            if cached is not None:
+                logger.debug(f"Using cached fields for {model_name}")
+                return cached
 
         logger.debug(f"Discovering fields for {model_name}...")
 
@@ -301,8 +305,8 @@ class OdooModelDiscovery:
                     logger.warning(f"Error processing field {field_name}: {e}")
                     continue
 
-            # Update cache
-            self._fields_cache[model_name] = fields_metadata
+            # Update TTLCache
+            self._fields_cache.set(model_name, fields_metadata)
 
             logger.debug(f"Discovered {len(fields_metadata)} fields for {model_name}")
             return fields_metadata
@@ -555,4 +559,5 @@ class OdooModelDiscovery:
         self._models_cache = None
         self._cache_timestamp = None
         self._fields_cache.clear()
+        self._safe_fields_cache.clear()
         logger.info("Cache refreshed")
