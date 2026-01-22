@@ -128,23 +128,12 @@ async def on_chat_start():
     await loading_msg.send()
 
     try:
-        # Get user-provided environment variables from Chainlit
-        user_env = cl.user_session.get("env") or {}
+        # All configuration is loaded from global .env file
+        # No per-user environment variables - single instance configuration
+        odoo_url = os.environ.get("ODOO_URL", "Not configured")
+        odoo_db = os.environ.get("ODOO_DB", "Not configured")
 
-        # Debug: log what we got from user_env
-        logger.info(f"User env keys: {list(user_env.keys()) if user_env else 'empty'}")
-
-        # Set environment variables from user_env for odoo_client and openai
-        # This allows the existing code to work without modification
-        env_vars = ["OPENAI_API_KEY", "ODOO_URL", "ODOO_DB", "ODOO_USERNAME", "ODOO_PASSWORD"]
-        for var in env_vars:
-            if var in user_env and user_env[var]:
-                os.environ[var] = user_env[var]
-                logger.info(f"Set {var} from user_env")
-
-        # Get connection info for display
-        odoo_url = user_env.get("ODOO_URL") or os.environ.get("ODOO_URL", "Not configured")
-        odoo_db = user_env.get("ODOO_DB") or os.environ.get("ODOO_DB", "Not configured")
+        logger.info(f"Using global env: ODOO_URL={odoo_url}, ODOO_DB={odoo_db}")
 
         # Update loading message with connection details
         loading_msg.content = f"Connecting to Odoo at {odoo_url}..."
@@ -736,14 +725,8 @@ async def on_chat_resume(thread=None):
     await loading_msg.send()
 
     try:
-        # Get user-provided environment variables from Chainlit
-        user_env = cl.user_session.get("env") or {}
-
-        # Set environment variables from user_env
-        env_vars = ["OPENAI_API_KEY", "ODOO_URL", "ODOO_DB", "ODOO_USERNAME", "ODOO_PASSWORD"]
-        for var in env_vars:
-            if var in user_env and user_env[var]:
-                os.environ[var] = user_env[var]
+        # All configuration is loaded from global .env file
+        # No per-user environment variables - single instance configuration
 
         # Re-initialize Odoo client and agent for resumed session
         odoo_client = get_odoo_client()
