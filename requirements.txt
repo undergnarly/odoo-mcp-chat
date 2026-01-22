@@ -1,7 +1,7 @@
 # ===================================
-# Foundation: mcp-odoo (from local fork)
+# Foundation: mcp-odoo (from GitHub)
 # ===================================
-# Install with: pip install -e ./mcp-odoo
+git+https://github.com/undergnarly/mcp-odoo.git@main#egg=odoo-mcp
 # Dependencies included:
 # - mcp>=0.1.1
 # - requests>=2.31.0
