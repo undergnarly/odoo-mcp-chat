@@ -111,7 +111,10 @@ async def on_chat_start():
 
     try:
         # Get user-provided environment variables from Chainlit
-        user_env = cl.user_session.get("user_env") or {}
+        user_env = cl.user_session.get("env") or {}
+
+        # Debug: log what we got from user_env
+        logger.info(f"User env keys: {list(user_env.keys()) if user_env else 'empty'}")
 
         # Set environment variables from user_env for odoo_client and openai
         # This allows the existing code to work without modification
@@ -119,6 +122,7 @@ async def on_chat_start():
         for var in env_vars:
             if var in user_env and user_env[var]:
                 os.environ[var] = user_env[var]
+                logger.info(f"Set {var} from user_env")
 
         # Get connection info for display
         odoo_url = user_env.get("ODOO_URL") or os.environ.get("ODOO_URL", "Not configured")
