@@ -41,6 +41,20 @@ agent: Optional[OdooAgent] = None
 settings = get_settings()
 
 
+async def send_assistant_message(content: str) -> cl.Message:
+    """
+    Send assistant message without parent_id to ensure it shows in chat history.
+
+    Chainlit by default sets parent_id for messages sent in response context,
+    which causes them to not appear when resuming chat from history.
+    Setting parent_id=None makes them root messages that always show.
+    """
+    msg = cl.Message(content=content)
+    msg.parent_id = None  # Ensure no parent - critical for history display
+    await msg.send()
+    return msg
+
+
 @cl.data_layer
 def get_data_layer():
     """Provide data layer for chat history persistence"""
@@ -109,6 +123,10 @@ async def on_chat_start():
 
     logger.info(f"Starting new chat session. Thread: {thread_id}")
 
+    # Show loading indicator while connecting
+    loading_msg = cl.Message(content="Connecting to Odoo...")
+    await loading_msg.send()
+
     try:
         # Get user-provided environment variables from Chainlit
         user_env = cl.user_session.get("env") or {}
@@ -128,9 +146,17 @@ async def on_chat_start():
         odoo_url = user_env.get("ODOO_URL") or os.environ.get("ODOO_URL", "Not configured")
         odoo_db = user_env.get("ODOO_DB") or os.environ.get("ODOO_DB", "Not configured")
 
+        # Update loading message with connection details
+        loading_msg.content = f"Connecting to Odoo at {odoo_url}..."
+        await loading_msg.update()
+
         # Initialize Odoo client
         odoo_client = get_odoo_client()
         logger.info("Odoo client initialized")
+
+        # Update loading status
+        loading_msg.content = "Initializing AI agent..."
+        await loading_msg.update()
 
         # Store odoo_client in session for later use
         cl.user_session.set("odoo_client", odoo_client)
@@ -143,6 +169,9 @@ async def on_chat_start():
         global agent
         agent = OdooAgent(odoo_client, discovery)
         cl.user_session.set("agent", agent)
+
+        # Remove loading message and send welcome message
+        await loading_msg.remove()
 
         # Send welcome message
         welcome_message = f"""
@@ -180,25 +209,25 @@ I'll always ask for confirmation before making changes.
 **Database:** {odoo_db}
         """
 
-        await cl.Message(content=welcome_message).send()
+        await send_assistant_message(welcome_message)
 
         # Show available models (with fallback to discovery)
         try:
             models_info = odoo_client.get_models()
             model_count = len(models_info.get("model_names", []))
             if model_count > 0:
-                await cl.Message(
-                    content=f"Ready! I have access to **{model_count}** models in your Odoo instance."
-                ).send()
+                await send_assistant_message(
+                    f"Ready! I have access to **{model_count}** models in your Odoo instance."
+                )
             else:
                 raise ValueError("No models returned from ir.model")
         except Exception as models_err:
             # Fallback to discovery's default models when ir.model is not accessible
             logger.warning(f"Cannot access ir.model, using discovery models: {models_err}")
             model_count = len(discovery.get_all_models())
-            await cl.Message(
-                content=f"Ready! Using **{model_count}** standard Odoo models (limited API access)."
-            ).send()
+            await send_assistant_message(
+                f"Ready! Using **{model_count}** standard Odoo models (limited API access)."
+            )
 
     except Exception as e:
         logger.error(f"Error initializing chat: {e}")
@@ -207,9 +236,9 @@ I'll always ask for confirmation before making changes.
             error_message=str(e),
             stack_trace=traceback.format_exc(),
         )
-        await cl.Message(
-            content=f"Error initializing: {str(e)}\n\nPlease check your Odoo connection settings."
-        ).send()
+        # Update loading message to show error
+        loading_msg.content = f"Connection failed: {str(e)}\n\nPlease check your Odoo connection settings."
+        await loading_msg.update()
 
 
 def handle_pagination_command(user_input: str) -> Optional[int]:
@@ -263,7 +292,7 @@ async def on_message(message: cl.Message):
 
     if agent is None:
         logger.error("Agent not initialized when processing message")
-        await cl.Message(content="❌ Agent not initialized. Please refresh the page.").send()
+        await send_assistant_message("❌ Agent not initialized. Please refresh the page.")
         return
 
     user_input = message.content
@@ -278,7 +307,7 @@ async def on_message(message: cl.Message):
             return
         elif confirmation is False:
             cl.user_session.set("pending_action", None)
-            await cl.Message(content="Action cancelled.").send()
+            await send_assistant_message("Action cancelled.")
             return
 
     # Check for pagination commands
@@ -297,10 +326,10 @@ async def on_message(message: cl.Message):
                 query_ctx["total_count"]
             )
             content += f"\n\n---\n**Page {new_page + 1} of {total_pages}** | To navigate: type `next`, `prev`, `page 5`, or `last`"
-            await cl.Message(content=content).send()
+            await send_assistant_message(content)
             return
         elif query_ctx:
-            await cl.Message(content=f"Already on page {new_page + 1}").send()
+            await send_assistant_message(f"Already on page {new_page + 1}")
             return
 
     # Handle file uploads (attached to message)
@@ -308,35 +337,42 @@ async def on_message(message: cl.Message):
         for element in message.elements:
             if isinstance(element, cl.File):
                 logger.info(f"File uploaded: {element.name}")
-                await cl.Message(
-                    content=f"📎 Received file: **{element.name}**"
-                ).send()
+                await send_assistant_message(f"📎 Received file: **{element.name}**")
                 # Store file for later use
                 cl.user_session.set("uploaded_file", element)
 
 
     # Show chain of thought with detailed steps
     try:
-        # Step 1: Analyze intent
+        # Step 1: Analyze intent (with conversation history for context)
         async with cl.Step(name="🧠 Analyzing Intent", type="llm") as intent_step:
             intent_step.input = user_input
 
-            # Route the intent first to show what we detected
-            intent_result = await agent.router.route(user_input)
+            # Route the intent with history for context resolution
+            # agent.history contains conversation history for context
+            intent_result = await agent.router.route(user_input, agent.history)
             intent = intent_result.get("intent", "UNKNOWN")
             model = intent_result.get("model", "unknown")
             parameters = intent_result.get("parameters", {})
+            record_id = parameters.get("record_id") if parameters else None
+            reasoning = intent_result.get("reasoning", "")
+
+            # Show context resolution if record_id was resolved from history
+            context_note = ""
+            if record_id and "this" in user_input.lower() or "it" in user_input.lower() or "этот" in user_input.lower() or "эту" in user_input.lower():
+                context_note = f"\n**Context Resolved:** Record ID {record_id} from previous conversation"
 
             intent_step.output = f"""**Detected Intent:** {intent}
 **Target Model:** {model or 'auto-detect'}
-**Parameters:** {parameters if parameters else 'none'}"""
+**Parameters:** {parameters if parameters else 'none'}{context_note}
+**Reasoning:** {reasoning}"""
 
         # Step 2: Process with agent
         async with cl.Step(name="⚙️ Processing Request", type="tool") as process_step:
             process_step.input = f"Intent: {intent}, Model: {model}"
 
-            # Process message with agent
-            response = await agent.process_message(user_input)
+            # Process message with agent, passing pre-routed intent to avoid double routing
+            response = await agent.process_message(user_input, pre_routed_intent=intent_result)
 
             response_type = response.get("type")
             process_step.output = f"Response type: {response_type}"
@@ -363,7 +399,7 @@ async def on_message(message: cl.Message):
             user_input=user_input,
             stack_trace=traceback.format_exc(),
         )
-        await cl.Message(content=f"❌ Error: {str(e)}").send()
+        await send_assistant_message(f"❌ Error: {str(e)}")
 
 
 def format_field_value(key: str, value) -> str:
@@ -560,7 +596,7 @@ async def handle_query_result(response: dict):
     if not results:
         content = f"## 📊 Query Results: `{model}`\n\n"
         content += "❌ No records found matching your query."
-        await cl.Message(content=content).send()
+        await send_assistant_message(content)
         return
 
     # Store query context for pagination
@@ -581,7 +617,7 @@ async def handle_query_result(response: dict):
     if total_pages > 1:
         content += f"\n\n---\n**Page 1 of {total_pages}** | To navigate: type `next`, `prev`, `page 5`, or `last`"
 
-    await cl.Message(content=content).send()
+    await send_assistant_message(content)
 
 
 async def handle_confirmation_required(response: dict):
@@ -601,7 +637,7 @@ async def handle_confirmation_required(response: dict):
     # Add instructions for confirmation
     content += "\n\n---\n**Type `yes` or `confirm` to proceed, or `no` / `cancel` to abort.**"
 
-    await cl.Message(content=content).send()
+    await send_assistant_message(content)
 
 
 def handle_confirmation_command(user_input: str) -> Optional[bool]:
@@ -625,13 +661,13 @@ async def execute_pending_action():
     """Execute the pending action stored in session."""
     pending = cl.user_session.get("pending_action")
     if not pending:
-        await cl.Message(content="No pending action to execute.").send()
+        await send_assistant_message("No pending action to execute.")
         return
 
     # Clear pending action
     cl.user_session.set("pending_action", None)
 
-    await cl.Message(content="Executing action...").send()
+    await send_assistant_message("Executing action...")
 
     try:
         if agent is not None:
@@ -639,16 +675,16 @@ async def execute_pending_action():
 
             if execution_result.get("success"):
                 result_content = execution_result.get("content", "Action completed successfully")
-                await cl.Message(content=f"**Success:** {result_content}").send()
+                await send_assistant_message(f"**Success:** {result_content}")
             else:
                 error_content = execution_result.get("content", "Action failed")
-                await cl.Message(content=f"**Error:** {error_content}").send()
+                await send_assistant_message(f"**Error:** {error_content}")
         else:
-            await cl.Message(content="**Error:** Agent not initialized").send()
+            await send_assistant_message("**Error:** Agent not initialized")
 
     except Exception as e:
         logger.error(f"Error executing confirmed action: {e}")
-        await cl.Message(content=f"**Error:** {str(e)}").send()
+        await send_assistant_message(f"**Error:** {str(e)}")
 
 
 async def handle_error(response: dict):
@@ -659,7 +695,7 @@ async def handle_error(response: dict):
         response: Response dict from agent
     """
     content = f"## ⚠️ Error\n\n{response.get('content', 'Unknown error')}"
-    await cl.Message(content=content).send()
+    await send_assistant_message(content)
 
 
 async def handle_default(response: dict):
@@ -670,7 +706,7 @@ async def handle_default(response: dict):
         response: Response dict from agent
     """
     content = response.get("content", "No content")
-    await cl.Message(content=content).send()
+    await send_assistant_message(content)
 
 
 @cl.on_chat_end
@@ -695,15 +731,35 @@ async def on_chat_resume(thread=None):
 
     logger.info(f"Chat session resumed. Thread: {thread_id}")
 
+    # Show loading indicator
+    loading_msg = cl.Message(content="Reconnecting to Odoo...")
+    await loading_msg.send()
+
     try:
+        # Get user-provided environment variables from Chainlit
+        user_env = cl.user_session.get("env") or {}
+
+        # Set environment variables from user_env
+        env_vars = ["OPENAI_API_KEY", "ODOO_URL", "ODOO_DB", "ODOO_USERNAME", "ODOO_PASSWORD"]
+        for var in env_vars:
+            if var in user_env and user_env[var]:
+                os.environ[var] = user_env[var]
+
         # Re-initialize Odoo client and agent for resumed session
         odoo_client = get_odoo_client()
+        cl.user_session.set("odoo_client", odoo_client)
+
         discovery = OdooModelDiscovery(odoo_client, cache_ttl=300)
+        cl.user_session.set("discovery", discovery)
 
         global agent
         agent = OdooAgent(odoo_client, discovery)
+        cl.user_session.set("agent", agent)
 
         logger.info("Agent re-initialized for resumed session")
+
+        # Remove loading message - chat history will be shown automatically
+        await loading_msg.remove()
 
     except Exception as e:
         logger.error(f"Error resuming chat: {e}")
@@ -712,6 +768,9 @@ async def on_chat_resume(thread=None):
             error_message=str(e),
             stack_trace=traceback.format_exc(),
         )
+        # Update loading message with error
+        loading_msg.content = f"Failed to reconnect: {str(e)}"
+        await loading_msg.update()
 
 
 # File upload handling

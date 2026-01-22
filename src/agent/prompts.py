@@ -13,6 +13,21 @@ INTENT_CLASSIFIER_PROMPT = ChatPromptTemplate.from_messages([
 
 IMPORTANT: You must understand requests in ANY language (English, Russian, Spanish, French, German, etc.) and classify them correctly. The user may write in any language.
 
+CRITICAL - CONVERSATION CONTEXT:
+You have access to the conversation history below. When the user refers to "this record", "this order", "it", "this one", "in this order", etc., you MUST use the context from previous messages to understand what they're referring to.
+
+CONTEXT RESOLUTION RULES:
+1. If the user says "this order", "this record", "it", "in this one", etc. - look at the conversation history to find which record was last discussed
+2. If you see a previous assistant message with record data (like "Found order S00129 (id=5)"), extract that record_id (5) for the current request
+3. If the previous query returned multiple records, and user says "the first one" or "record #2", resolve that to the specific record_id
+4. If the previous assistant message mentions a model (like sale.order), use that as the model for UPDATE/DELETE/ACTION intents
+5. NEVER return record_id=null if there's a clear reference to a previously discussed record
+
+Examples of context resolution:
+- Previous: "Found order S00129 (id=5)" + User: "change the date in this order" → record_id=5, model=sale.order
+- Previous: "Showing partner John (id=42)" + User: "update his email" → record_id=42, model=res.partner
+- Previous: "Found 3 products" + User: "delete the first one" → need to check history for the first product's id
+
 Available intent categories:
 1. QUERY - User wants to read/query data from Odoo
    Examples: "Show me all records", "What's in the system?", "List items", "Get data"
@@ -32,17 +47,32 @@ Available intent categories:
 6. ATTACH - User wants to attach a file
    Examples: "Attach the file", "Upload the document", "Add attachment"
 
-7. MESSAGE - User wants to post a message/comment
-   Examples: "Add a comment", "Post a message", "Leave a note"
+7. MESSAGE - User wants to post a message/comment to an Odoo record
+   Examples: "Add a comment to order #123", "Post a message on this partner", "Leave a note on the invoice"
+   IMPORTANT: This is for posting messages TO Odoo records, NOT for general conversation.
 
-8. METADATA - User asks about system capabilities, available models, help, or what data is accessible
+8. CHAT - User is making general conversation, greetings, thank you, or asking non-Odoo questions
+   Examples: "Thank you", "Thanks!", "Hello", "Great", "Perfect", "Okay", "That's all", "Bye"
+   This also applies to conversational messages in ANY language (greetings, acknowledgments, thanks).
+   IMPORTANT: Use this for conversational messages that don't require any Odoo operation.
+
+9. METADATA - User asks about system capabilities, available models, help, or what data is accessible
    Examples: "What can you do?", "List available models", "Help me", "Show capabilities",
    "What data do you have?", "What data is available?", "What can I access?", "What models exist?",
    "Show me available data types", "What information can I query?"
    IMPORTANT: If the user asks what data/models are available WITHOUT specifying a concrete model, this is METADATA, not QUERY.
 
+10. SCHEMA_QUERY - User asks about model structure, fields, or allowed values for a SPECIFIC model
+   Examples: "What fields does sale.order have?", "What are the possible statuses?", "What values can state have?",
+   "какие статусы у заказа?", "какие поля есть у партнера?", "show me fields for purchase.order",
+   "what selection values are available for state field?", "list fields of product.product"
+   Parameters should include: query_type ("fields", "statuses", "selection") and target_field (if asking about specific field)
+
 ## Available Odoo Models (from system discovery):
 {available_models}
+
+## Current Model Schema (if detected):
+{model_schema}
 
 ## Model Detection Rules:
 Analyze the user's request and try to identify the target Odoo model based on:
@@ -50,16 +80,18 @@ Analyze the user's request and try to identify the target Odoo model based on:
 2. Natural language description matching model names or descriptions
 3. Context clues about what type of data is being requested
 
-Common patterns (language-agnostic):
-- Contact/partner/customer/supplier related -> res.partner
-- Sale/order/quotation related -> sale.order
-- Purchase/procurement related -> purchase.order
-- Product/item/goods related -> product.product or product.template
-- Invoice/bill/payment related -> account.move
-- Stock/inventory/warehouse related -> stock.quant or stock.move
-- Employee/staff/HR related -> hr.employee
-- Lead/opportunity/CRM related -> crm.lead
-- Project/task related -> project.project or project.task
+Common patterns (multilingual - English/Russian/Spanish/etc.):
+- Contact/partner/customer/supplier/контакт/партнер/клиент/поставщик -> res.partner
+- Sale/order/quotation/ордер/заказ/продажа/котировка -> sale.order
+- Purchase/procurement/закупка/покупка -> purchase.order
+- Product/item/goods/товар/продукт -> product.product or product.template
+- Invoice/bill/payment/счет/инвойс/платеж -> account.move
+- Stock/inventory/warehouse/склад/запасы -> stock.quant or stock.move
+- Employee/staff/HR/сотрудник/персонал -> hr.employee
+- Lead/opportunity/CRM/лид/возможность -> crm.lead
+- Project/task/проект/задача -> project.project or project.task
+
+IMPORTANT: The word "ордер" in Russian means "order" and should map to sale.order (for sales) or purchase.order (for purchases). Default to sale.order if unclear.
 
 CRITICAL FIELD MAPPINGS for res.partner (Odoo 12+):
 - To find SUPPLIERS: use ['supplier_rank', '>', 0] (NOT 'supplier' - deprecated!)
@@ -68,9 +100,28 @@ CRITICAL FIELD MAPPINGS for res.partner (Odoo 12+):
 
 If the model cannot be determined from context, set model to null and the system will ask for clarification.
 
+CRITICAL - VALUE GENERATION RULES:
+When generating values for CREATE or UPDATE operations, you MUST:
+1. Generate ACTUAL values, not placeholders or descriptions
+2. For dates: Use ISO format YYYY-MM-DD (e.g., "2025-11-24"), calculate actual dates
+3. For datetime: Use ISO format YYYY-MM-DD HH:MM:SS (e.g., "2025-11-24 14:30:00")
+4. For "today", "now", "current date": Calculate the actual date based on today's date: {current_date}
+5. For "tomorrow": Add 1 day to today's date
+6. For "next week": Add 7 days to today's date
+7. For relative dates like "in 3 days": Calculate the actual date
+8. For numbers: Use actual numeric values (integers or floats), not strings
+9. For booleans: Use true/false, not strings
+10. NEVER use placeholder text like "today's date", "user input", "to be determined"
+
+Examples:
+- User says "set date to today" with current_date=2025-11-22 → {{"date_order": "2025-11-22"}}
+- User says "change quantity to 5" → {{"product_qty": 5}}
+- User says "set price to 100.50" → {{"price_unit": 100.50}}
+- User says "mark as done" → {{"state": "done"}} or use appropriate action method
+
 Respond in JSON format:
 {{
-  "intent": "QUERY|CREATE|UPDATE|DELETE|ACTION|ATTACH|MESSAGE|METADATA",
+  "intent": "QUERY|CREATE|UPDATE|DELETE|ACTION|ATTACH|MESSAGE|CHAT|METADATA|SCHEMA_QUERY",
   "model": "model_name or null",
   "confidence": 0.0-1.0,
   "reasoning": "Brief explanation",
@@ -82,6 +133,7 @@ Respond in JSON format:
     "limit": 10
   }}
 }}"""),
+    MessagesPlaceholder(variable_name="history", optional=True),
     ("human", "{user_input}"),
 ])
 

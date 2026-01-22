@@ -2,6 +2,7 @@
 LangChain agent for natural language interaction with Odoo
 """
 import json
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from langchain_core.language_models import BaseChatModel
@@ -19,6 +20,8 @@ from src.agent.prompts import (
 )
 from src.utils.logging import get_logger, log_timing
 from src.utils.error_sanitizer import ErrorSanitizer
+from src.rag.schema_cache import OdooSchemaCache
+from src.rag.validator import OdooValueValidator
 
 logger = get_logger(__name__)
 
@@ -29,7 +32,7 @@ class IntentRouter:
     Uses dynamic model discovery to provide context to LLM.
     """
 
-    def __init__(self, llm: BaseChatModel, odoo_client, discovery_service=None):
+    def __init__(self, llm: BaseChatModel, odoo_client, discovery_service=None, schema_cache=None):
         """
         Initialize the intent router
 
@@ -37,10 +40,12 @@ class IntentRouter:
             llm: LangChain language model
             odoo_client: OdooClient instance
             discovery_service: Optional OdooModelDiscovery for dynamic model info
+            schema_cache: Optional OdooSchemaCache for field injection
         """
         self.llm = llm
         self.odoo = odoo_client
         self.discovery = discovery_service
+        self.schema_cache = schema_cache
         self._cached_models_info = None
 
     def _get_available_models_info(self) -> str:
@@ -95,12 +100,78 @@ class IntentRouter:
             logger.warning(f"Could not fetch models info: {e}")
             return "Model information not available. Ask user to specify the model explicitly."
 
-    async def route(self, user_input: str) -> Dict[str, Any]:
+    def _detect_model_from_context(self, user_input: str, history: List[Dict] = None) -> Optional[str]:
+        """
+        Try to detect the likely model from user input and conversation history.
+
+        Args:
+            user_input: Current user message
+            history: Conversation history
+
+        Returns:
+            Model name if detected, None otherwise
+        """
+        # Keywords to model mapping
+        model_keywords = {
+            'sale.order': ['order', 'sale', 'quotation', 'ордер', 'заказ', 'продажа', 'котировка'],
+            'purchase.order': ['purchase', 'закупка', 'покупка', 'rfq'],
+            'res.partner': ['partner', 'contact', 'customer', 'supplier', 'партнер', 'контакт', 'клиент', 'поставщик'],
+            'product.product': ['product', 'item', 'товар', 'продукт'],
+            'account.move': ['invoice', 'bill', 'payment', 'счет', 'инвойс', 'платеж'],
+            'stock.picking': ['picking', 'delivery', 'shipment', 'отгрузка', 'доставка'],
+            'crm.lead': ['lead', 'opportunity', 'лид', 'возможность'],
+            'project.project': ['project', 'проект'],
+            'project.task': ['task', 'задача'],
+            'hr.employee': ['employee', 'staff', 'сотрудник', 'персонал'],
+        }
+
+        # Check user input for keywords
+        input_lower = user_input.lower()
+        for model, keywords in model_keywords.items():
+            for kw in keywords:
+                if kw in input_lower:
+                    logger.debug(f"Detected model {model} from keyword '{kw}' in input")
+                    return model
+
+        # Check recent history for model mentions
+        if history:
+            for msg in reversed(history[-5:]):  # Check last 5 messages
+                content = msg.get("content", "").lower()
+                # Look for explicit model references like "sale.order" or "Found order"
+                for model in model_keywords:
+                    if model in content:
+                        logger.debug(f"Detected model {model} from history")
+                        return model
+
+        return None
+
+    def _get_schema_for_prompt(self, model: str) -> str:
+        """
+        Get model schema formatted for prompt injection.
+
+        Args:
+            model: Odoo model name
+
+        Returns:
+            Formatted schema string or empty string if not available
+        """
+        if not self.schema_cache or not model:
+            return ""
+
+        try:
+            schema = self.schema_cache.get_model_schema(model)
+            return schema.format_for_prompt()
+        except Exception as e:
+            logger.warning(f"Could not get schema for {model}: {e}")
+            return ""
+
+    async def route(self, user_input: str, history: List[Dict] = None) -> Dict[str, Any]:
         """
         Route user input to appropriate operation
 
         Args:
             user_input: Natural language request from user
+            history: Conversation history for context resolution
 
         Returns:
             Dict with intent classification and parameters
@@ -115,9 +186,35 @@ class IntentRouter:
             prompt = get_intent_classifier_prompt()
             chain = prompt | self.llm | JsonOutputParser()
 
+            # Convert history to LangChain message format
+            history_messages = []
+            if history:
+                for msg in history:
+                    role = msg.get("role")
+                    content = msg.get("content", "")
+                    if role == "user":
+                        history_messages.append(HumanMessage(content=content))
+                    elif role == "assistant":
+                        history_messages.append(AIMessage(content=content))
+                logger.info(f"Including {len(history_messages)} messages from history for context")
+
+            # Get current date for relative date calculations
+            current_date = datetime.now().strftime("%Y-%m-%d")
+
+            # Try to detect model for schema injection
+            likely_model = self._detect_model_from_context(user_input, history)
+            model_schema_text = ""
+            if likely_model:
+                model_schema_text = self._get_schema_for_prompt(likely_model)
+                if model_schema_text:
+                    logger.info(f"Injecting schema for model: {likely_model}")
+
             result = await chain.ainvoke({
                 "user_input": user_input,
-                "available_models": available_models
+                "available_models": available_models,
+                "history": history_messages,
+                "current_date": current_date,
+                "model_schema": model_schema_text
             })
 
             logger.info(f"Intent classified: {result.get('intent')} (confidence: {result.get('confidence')})")
@@ -154,8 +251,12 @@ class OdooAgent:
         # Initialize LLM based on configuration
         self.llm = self._init_llm()
 
-        # Initialize intent router with discovery service
-        self.router = IntentRouter(self.llm, odoo_client, discovery_service)
+        # Initialize schema cache and validator
+        self.schema_cache = OdooSchemaCache(odoo_client)
+        self.validator = OdooValueValidator(self.schema_cache)
+
+        # Initialize intent router with discovery service and schema cache
+        self.router = IntentRouter(self.llm, odoo_client, discovery_service, self.schema_cache)
 
         # Conversation history
         self.history: List[Dict] = []
@@ -163,7 +264,7 @@ class OdooAgent:
         # Cache for models info
         self._models_cache = None
 
-        logger.info("OdooAgent initialized")
+        logger.info("OdooAgent initialized with schema cache")
 
     # Valid Odoo domain operators
     VALID_ODOO_OPERATORS = {
@@ -348,6 +449,7 @@ class OdooAgent:
         self,
         user_message: str,
         user_context: Optional[Dict] = None,
+        pre_routed_intent: Optional[Dict] = None,
     ) -> Dict[str, Any]:
         """
         Process a user message and generate a response
@@ -355,6 +457,7 @@ class OdooAgent:
         Args:
             user_message: Natural language message from user
             user_context: Optional context about the user
+            pre_routed_intent: Optional pre-computed intent result to avoid double routing
 
         Returns:
             Dict with response data
@@ -362,14 +465,20 @@ class OdooAgent:
         logger.info(f"Processing user message: {user_message[:100]}...")
 
         try:
-            # Add to history
+            # Use pre-routed intent if available, otherwise route now
+            if pre_routed_intent:
+                intent_result = pre_routed_intent
+                logger.info("Using pre-routed intent result")
+            else:
+                # Route the intent (with history for context resolution)
+                # Pass history BEFORE adding current message to avoid circular reference
+                intent_result = await self.router.route(user_message, self.history)
+
+            # Add to history AFTER routing
             self.history.append({
                 "role": "user",
                 "content": user_message,
             })
-
-            # Route the intent
-            intent_result = await self.router.route(user_message)
             intent = intent_result.get("intent")
             model = intent_result.get("model")
             parameters = intent_result.get("parameters", {})
@@ -394,6 +503,18 @@ class OdooAgent:
 
             elif intent == "METADATA":
                 response = await self._handle_metadata()
+
+            elif intent == "SCHEMA_QUERY":
+                response = await self._handle_schema_query(model, parameters)
+
+            elif intent == "CHAT":
+                response = await self._handle_chat(user_message, self.history)
+
+            elif intent == "MESSAGE":
+                response = await self._handle_message(model, parameters, user_message)
+
+            elif intent == "ATTACH":
+                response = await self._handle_attach(model, parameters)
 
             else:
                 response = {
@@ -472,13 +593,15 @@ class OdooAgent:
                     limit=limit,
                 )
 
-            # Format results for display
+            # Format results for display - INCLUDE ID for context resolution!
             if results:
-                # Create a simple markdown list of results
+                # Create a markdown list with IDs for context reference
                 result_strings = []
-                for res in results[:10]:  # Limit display to 10
-                    name = res.get("name") or res.get("display_name") or f"Record {res.get('id')}"
-                    result_strings.append(f"- {name}")
+                for idx, res in enumerate(results[:10], 1):  # Limit display to 10
+                    record_id = res.get("id")
+                    name = res.get("name") or res.get("display_name") or f"Record {record_id}"
+                    # Include ID in format that LLM can parse for context
+                    result_strings.append(f"{idx}. **{name}** (id={record_id})")
 
                 formatted_results = "\n".join(result_strings)
 
@@ -699,6 +822,256 @@ What would you like to do?"""
             }
         }
 
+    async def _handle_schema_query(
+        self,
+        model: Optional[str],
+        parameters: Dict,
+    ) -> Dict[str, Any]:
+        """
+        Handle schema query intent - return model structure, fields, or selection values.
+
+        Args:
+            model: Target Odoo model
+            parameters: Query parameters (query_type, target_field)
+
+        Returns:
+            Response dict with schema information
+        """
+        if not model:
+            return {
+                "type": "clarification",
+                "content": "Which model would you like to know about? (e.g., sale.order, res.partner, product.product)",
+            }
+
+        try:
+            schema = self.schema_cache.get_model_schema(model)
+            query_type = parameters.get("query_type", "fields")
+            target_field = parameters.get("target_field")
+
+            # Handle status/state queries
+            if query_type == "statuses" or target_field in ("state", "status"):
+                state_info = schema.format_state_info()
+                if state_info:
+                    return {
+                        "type": "schema_info",
+                        "content": state_info,
+                        "model": model,
+                    }
+                else:
+                    return {
+                        "type": "schema_info",
+                        "content": f"Model `{model}` does not have a state/status field with predefined values.",
+                        "model": model,
+                    }
+
+            # Handle specific field query
+            if target_field and target_field != "state":
+                field_schema = schema.get_field(target_field)
+                if not field_schema:
+                    return {
+                        "type": "error",
+                        "content": f"Field `{target_field}` not found in model `{model}`.",
+                    }
+
+                lines = [f"### Field: {target_field} in {model}"]
+                lines.append(f"- **Type**: {field_schema.type}")
+                lines.append(f"- **Label**: {field_schema.string}")
+                if field_schema.required:
+                    lines.append("- **Required**: Yes")
+                if field_schema.readonly:
+                    lines.append("- **Readonly**: Yes")
+                if field_schema.help:
+                    lines.append(f"- **Help**: {field_schema.help}")
+                if field_schema.selection:
+                    lines.append("- **Allowed values**:")
+                    for val, label in field_schema.selection:
+                        lines.append(f"  - `{val}`: {label}")
+                if field_schema.relation:
+                    lines.append(f"- **Related model**: {field_schema.relation}")
+
+                return {
+                    "type": "schema_info",
+                    "content": "\n".join(lines),
+                    "model": model,
+                    "field": target_field,
+                }
+
+            # Default: show model fields
+            content = schema.format_for_prompt(max_fields=30)
+
+            # Add state info if available
+            state_info = schema.format_state_info()
+            if state_info:
+                content += "\n\n" + state_info
+
+            return {
+                "type": "schema_info",
+                "content": content,
+                "model": model,
+                "total_fields": len(schema.fields),
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting schema for {model}: {e}")
+            sanitized_error = ErrorSanitizer.sanitize(str(e))
+            return {
+                "type": "error",
+                "content": f"Cannot get schema for `{model}`: {sanitized_error}",
+            }
+
+    async def _handle_chat(self, user_message: str, history: List[Dict] = None) -> Dict[str, Any]:
+        """
+        Handle general conversational messages using LLM with conversation context.
+
+        Args:
+            user_message: User's message
+            history: Conversation history for context
+
+        Returns:
+            Response dict with conversational reply
+        """
+        try:
+            # Build messages with history for context
+            messages = [
+                SystemMessage(content="""You are an intelligent AI assistant specialized in Odoo ERP.
+You have full conversation history available - use it to understand context deeply.
+
+CRITICAL RULES:
+1. ALWAYS respond in the SAME LANGUAGE as the user's message
+2. Reference previous conversation naturally (e.g., "Yes, the order S00129 we discussed...")
+3. Be proactive - suggest relevant next actions based on context
+4. Be concise but informative (1-3 sentences usually)
+5. If the user seems confused, offer clarification or help
+
+CONTEXT AWARENESS:
+- If user says "thanks" after seeing data, acknowledge what they received
+- If user asks a follow-up question, connect it to previous topic
+- If user seems to want to continue, suggest logical next steps
+- Remember specific records, models, and data from the conversation
+
+You are helpful, smart, and proactive - not just reactive.""")
+            ]
+
+            # Add conversation history for context
+            if history:
+                for msg in history[-10:]:  # Last 10 messages for context
+                    role = msg.get("role")
+                    content = msg.get("content", "")
+                    if role == "user":
+                        messages.append(HumanMessage(content=content))
+                    elif role == "assistant":
+                        messages.append(AIMessage(content=content))
+
+            # Add current message
+            messages.append(HumanMessage(content=user_message))
+
+            response = await self.llm.ainvoke(messages)
+            return {
+                "type": "chat",
+                "content": response.content,
+            }
+
+        except Exception as e:
+            logger.warning(f"Error generating chat response: {e}")
+            # Fallback to simple response
+            return {
+                "type": "chat",
+                "content": "I'm here to help you with Odoo. What would you like to do?",
+            }
+
+    async def _handle_message(
+        self,
+        model: Optional[str],
+        parameters: Dict,
+        original_message: str,
+    ) -> Dict[str, Any]:
+        """
+        Handle MESSAGE intent - post a message/comment to an Odoo record.
+
+        Args:
+            model: Target Odoo model
+            parameters: Parameters including record_id and message content
+            original_message: Original user message
+
+        Returns:
+            Response dict
+        """
+        if self.settings.read_only_mode:
+            return {
+                "type": "error",
+                "content": "🚫 **Message Posting Blocked**\n\nI am currently running in **Read-Only Mode**. Posting messages is disabled to protect your data."
+            }
+
+        record_id = parameters.get("record_id")
+        message_body = parameters.get("message") or parameters.get("body") or parameters.get("content")
+
+        if not model:
+            return {
+                "type": "clarification",
+                "content": "Which record would you like to post a message to? Please specify the model and record ID.",
+            }
+
+        if not record_id:
+            return {
+                "type": "clarification",
+                "content": f"Which {model} record would you like to post a message to? Please specify the record ID.",
+            }
+
+        if not message_body:
+            return {
+                "type": "clarification",
+                "content": f"What message would you like to post to {model} record {record_id}?",
+            }
+
+        return {
+            "type": "confirmation_required",
+            "content": f"⚠️ About to post message to {model} record {record_id}:\n\n\"{message_body}\"\n\nProceed?",
+            "operation": "message",
+            "model": model,
+            "record_id": record_id,
+            "message_body": message_body,
+        }
+
+    async def _handle_attach(
+        self,
+        model: Optional[str],
+        parameters: Dict,
+    ) -> Dict[str, Any]:
+        """
+        Handle ATTACH intent - attach a file to an Odoo record.
+
+        Args:
+            model: Target Odoo model
+            parameters: Parameters including record_id
+
+        Returns:
+            Response dict
+        """
+        if self.settings.read_only_mode:
+            return {
+                "type": "error",
+                "content": "🚫 **Attachment Blocked**\n\nI am currently running in **Read-Only Mode**. Attaching files is disabled to protect your data."
+            }
+
+        record_id = parameters.get("record_id")
+
+        if not model:
+            return {
+                "type": "clarification",
+                "content": "Which record would you like to attach a file to? Please specify the model.",
+            }
+
+        if not record_id:
+            return {
+                "type": "clarification",
+                "content": f"Which {model} record would you like to attach a file to? Please specify the record ID.",
+            }
+
+        return {
+            "type": "clarification",
+            "content": f"Please upload the file you want to attach to {model} record {record_id}.",
+        }
+
     async def execute_confirmed_action(self, action_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a confirmed action (create, update, delete, or workflow action).
@@ -718,6 +1091,21 @@ What would you like to do?"""
         logger.info(f"Executing confirmed action: {operation} on {model}")
 
         try:
+            # Validate and convert values for create/update operations
+            if values and operation in ("create", "update"):
+                validated_values, validation_errors = self.validator.validate_and_convert(
+                    model, values, operation
+                )
+                if validation_errors:
+                    error_list = "\n".join([f"- {e}" for e in validation_errors])
+                    return {
+                        "success": False,
+                        "content": f"⚠️ **Validation errors:**\n{error_list}",
+                        "validation_errors": validation_errors,
+                    }
+                values = validated_values
+                logger.info(f"Values validated and converted: {values}")
+
             if operation == "create":
                 if not model or not values:
                     return {
@@ -741,7 +1129,9 @@ What would you like to do?"""
                     }
 
                 with log_timing("odoo_write", model=model, record_id=record_id):
-                    self.odoo.execute_method(model, "write", [[record_id], values])
+                    # Odoo write() expects: write(ids, vals) - two separate arguments
+                    # execute_method passes *args to execute_kw as list
+                    self.odoo.execute_method(model, "write", [record_id], values)
                 return {
                     "success": True,
                     "content": f"Successfully updated {model} record {record_id}",
@@ -777,6 +1167,34 @@ What would you like to do?"""
                     "content": f"Successfully executed {method} on {model} record {record_id}",
                     "record_id": record_id,
                     "result": result,
+                }
+
+            elif operation == "message":
+                if not model or not record_id:
+                    return {
+                        "success": False,
+                        "content": "Missing model or record_id for message operation",
+                    }
+
+                message_body = action_data.get("message_body")
+                if not message_body:
+                    return {
+                        "success": False,
+                        "content": "Missing message body for message operation",
+                    }
+
+                with log_timing("odoo_message_post", model=model, record_id=record_id):
+                    self.odoo.execute_method(
+                        model,
+                        "message_post",
+                        [[record_id]],
+                        body=message_body,
+                        message_type="comment"
+                    )
+                return {
+                    "success": True,
+                    "content": f"Successfully posted message to {model} record {record_id}",
+                    "record_id": record_id,
                 }
 
             else:
