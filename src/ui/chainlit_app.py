@@ -315,41 +315,55 @@ async def on_message(message: cl.Message):
                 cl.user_session.set("uploaded_file", element)
 
 
-    # Show typing indicator
-    async with cl.Step(name="Processing", type="run") as step:
-        step.output = "Analyzing your request..."
+    # Show chain of thought with detailed steps
+    try:
+        # Step 1: Analyze intent
+        async with cl.Step(name="🧠 Analyzing Intent", type="llm") as intent_step:
+            intent_step.input = user_input
 
-        try:
+            # Route the intent first to show what we detected
+            intent_result = await agent.router.route(user_input)
+            intent = intent_result.get("intent", "UNKNOWN")
+            model = intent_result.get("model", "unknown")
+            parameters = intent_result.get("parameters", {})
+
+            intent_step.output = f"""**Detected Intent:** {intent}
+**Target Model:** {model or 'auto-detect'}
+**Parameters:** {parameters if parameters else 'none'}"""
+
+        # Step 2: Process with agent
+        async with cl.Step(name="⚙️ Processing Request", type="tool") as process_step:
+            process_step.input = f"Intent: {intent}, Model: {model}"
+
             # Process message with agent
             response = await agent.process_message(user_input)
 
-            step.output = "Generating response..."
-
-            # Handle response based on type
             response_type = response.get("type")
+            process_step.output = f"Response type: {response_type}"
 
-            if response_type == "query_result":
-                await handle_query_result(response)
+        # Handle response based on type
+        if response_type == "query_result":
+            await handle_query_result(response)
 
-            elif response_type == "confirmation_required":
-                await handle_confirmation_required(response)
+        elif response_type == "confirmation_required":
+            await handle_confirmation_required(response)
 
-            elif response_type == "error":
-                await handle_error(response)
+        elif response_type == "error":
+            await handle_error(response)
 
-            else:
-                await handle_default(response)
+        else:
+            await handle_default(response)
 
-        except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            # Log detailed error for debugging
-            log_chat_error(
-                error_type="message_processing",
-                error_message=str(e),
-                user_input=user_input,
-                stack_trace=traceback.format_exc(),
-            )
-            await cl.Message(content=f"❌ Error: {str(e)}").send()
+    except Exception as e:
+        logger.error(f"Error processing message: {e}")
+        # Log detailed error for debugging
+        log_chat_error(
+            error_type="message_processing",
+            error_message=str(e),
+            user_input=user_input,
+            stack_trace=traceback.format_exc(),
+        )
+        await cl.Message(content=f"❌ Error: {str(e)}").send()
 
 
 def format_field_value(key: str, value) -> str:
