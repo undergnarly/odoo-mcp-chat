@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from src.config import get_settings
 from src.utils.logging import setup_logging, get_logger
-from odoo_mcp.odoo_client import get_odoo_client
+from src.odoo_mcp.odoo_client import get_odoo_client
 
 # Setup logging
 logger_instance = setup_logging()

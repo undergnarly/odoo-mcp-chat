@@ -21,7 +21,7 @@ from src.utils.logging import (
     clear_session_context,
     log_chat_error,
 )
-from odoo_mcp.odoo_client import get_odoo_client
+from src.odoo_mcp.odoo_client import get_odoo_client
 from src.agent.langchain_agent import OdooAgent
 from src.extensions.discovery import OdooModelDiscovery
 from src.ui.data_layer import (

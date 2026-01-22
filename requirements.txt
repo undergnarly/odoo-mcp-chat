@@ -1,11 +1,7 @@
 # ===================================
-# Foundation: mcp-odoo (from GitHub)
+# Odoo XML-RPC client (included in src/odoo_mcp)
 # ===================================
-git+https://github.com/undergnarly/mcp-odoo.git@main#egg=odoo-mcp
-# Dependencies included:
-# - mcp>=0.1.1
-# - requests>=2.31.0
-# - pypi-xmlrpc==2020.12.3
+# No external dependency needed
 
 # ===================================
 # Web UI Layer
