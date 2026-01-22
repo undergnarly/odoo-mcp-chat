@@ -12,12 +12,12 @@ import http.client
 import xmlrpc.client
 
 
-def safe_safe_print(*args, **kwargs):
+def safe_print(*args, **kwargs):
     """
     Safe print that ignores BrokenPipeError (happens in web environments like Chainlit)
     """
     try:
-        safe_print(*args, **kwargs)
+        print(*args, **kwargs)
     except BrokenPipeError:
         pass
     except Exception:
