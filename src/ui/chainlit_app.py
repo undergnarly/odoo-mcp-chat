@@ -298,7 +298,7 @@ async def on_message(message: cl.Message):
 
     if agent is None:
         logger.error("Agent not initialized when processing message")
-        await send_assistant_message("❌ Agent not initialized. Please refresh the page.")
+        await send_assistant_message("Error: Agent not initialized. Please refresh the page.")
         return
 
     user_input = message.content
@@ -351,7 +351,7 @@ async def on_message(message: cl.Message):
     # Show chain of thought with detailed steps
     try:
         # Step 1: Analyze intent (with conversation history for context)
-        async with cl.Step(name="🧠 Analyzing Intent", type="llm") as intent_step:
+        async with cl.Step(name="Analyzing Intent", type="llm") as intent_step:
             intent_step.input = user_input
 
             # Route the intent with history for context resolution
@@ -374,7 +374,7 @@ async def on_message(message: cl.Message):
 **Reasoning:** {reasoning}"""
 
         # Step 2: Process with agent
-        async with cl.Step(name="⚙️ Processing Request", type="tool") as process_step:
+        async with cl.Step(name="Processing Request", type="tool") as process_step:
             process_step.input = f"Intent: {intent}, Model: {model}"
 
             # Process message with agent, passing pre-routed intent to avoid double routing
@@ -405,7 +405,7 @@ async def on_message(message: cl.Message):
             user_input=user_input,
             stack_trace=traceback.format_exc(),
         )
-        await send_assistant_message(f"❌ Error: {str(e)}")
+        await send_assistant_message(f"Error: {str(e)}")
 
 
 def format_field_value(key: str, value) -> str:
@@ -560,7 +560,7 @@ def build_table_content(model: str, results: list, page: int, total_count: int) 
     total_pages = (total_count + PAGE_SIZE - 1) // PAGE_SIZE if total_count else 1
 
     # Build response content
-    content = f"## 📊 Query Results: `{model}`\n\n"
+    content = f"## Query Results: `{model}`\n\n"
     content += f"**Page {page + 1} of {total_pages}** | "
     content += f"Showing records {start_idx + 1}-{min(start_idx + len(page_results), total_count)} of {total_count} total\n\n"
 
@@ -600,8 +600,8 @@ async def handle_query_result(response: dict):
     results = response.get("results", [])
 
     if not results:
-        content = f"## 📊 Query Results: `{model}`\n\n"
-        content += "❌ No records found matching your query."
+        content = f"## Query Results: `{model}`\n\n"
+        content += "No records found matching your query."
         await send_assistant_message(content)
         return
 
@@ -700,7 +700,7 @@ async def handle_error(response: dict):
     Args:
         response: Response dict from agent
     """
-    content = f"## ⚠️ Error\n\n{response.get('content', 'Unknown error')}"
+    content = f"## Error\n\n{response.get('content', 'Unknown error')}"
     await send_assistant_message(content)
 
 

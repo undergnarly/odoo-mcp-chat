@@ -433,12 +433,7 @@
 
         // Get action badge HTML
         function getActionBadge(action) {
-            const icons = {
-                create: '&#x2795;',
-                update: '&#x270F;',
-                delete: '&#x1F5D1;'
-            };
-            return `<span class="action-badge action-${action}">${icons[action] || ''} ${action}</span>`;
+            return `<span class="action-badge action-${action}">${action}</span>`;
         }
 
         // Format changes for preview
