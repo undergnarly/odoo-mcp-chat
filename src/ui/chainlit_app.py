@@ -9,6 +9,7 @@ import uuid
 from typing import Optional
 
 import chainlit as cl
+from chainlit.server import app as chainlit_app
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -31,6 +32,22 @@ from src.ui.data_layer import (
     authenticate_user,
     user_exists,
 )
+from src.admin import router as admin_router
+
+# Mount admin router on Chainlit's FastAPI app
+# We need to insert our routes BEFORE Chainlit's catch-all route
+# Find and remove the catch-all route, add our router, then re-add catch-all
+_catch_all_route = None
+for i, route in enumerate(chainlit_app.routes):
+    if hasattr(route, 'path') and route.path == '/{full_path:path}':
+        _catch_all_route = chainlit_app.routes.pop(i)
+        break
+
+chainlit_app.include_router(admin_router)
+
+# Re-add catch-all route at the end
+if _catch_all_route:
+    chainlit_app.routes.append(_catch_all_route)
 
 # Setup logging
 logger_instance = setup_logging()

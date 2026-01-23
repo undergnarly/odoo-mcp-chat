@@ -7,9 +7,31 @@ from typing import Any, Dict, List, Optional
 from mcp.server.fastmcp import Context
 from pydantic import BaseModel, Field
 
-from src.utils.logging import get_logger, audit_log
+from src.utils.logging import get_logger, audit_log, audit_log_json
 
 logger = get_logger(__name__)
+
+
+def _get_record_name(odoo, model: str, record_id: int) -> str:
+    """Try to get display name for a record"""
+    try:
+        result = odoo.search_read(model, [["id", "=", record_id]], ["display_name", "name"], limit=1)
+        if result:
+            return result[0].get("display_name") or result[0].get("name") or f"#{record_id}"
+    except Exception:
+        pass
+    return f"#{record_id}"
+
+
+def _get_old_values(odoo, model: str, record_id: int, fields: list) -> dict:
+    """Read current values of fields before update"""
+    try:
+        result = odoo.search_read(model, [["id", "=", record_id]], fields, limit=1)
+        if result:
+            return result[0]
+    except Exception:
+        pass
+    return {}
 
 
 # ============================================
@@ -107,22 +129,26 @@ def register_tools(mcp_server):
 
         try:
             logger.info(f"Creating record in {model}: {values}")
-            audit_log(
-                action="create_record_attempt",
-                user=user,
-                details={"model": model, "values": str(values)}
-            )
 
             # Execute create method
             record_id = odoo.execute_method(model, "create", [values])
 
             if record_id:
+                # Get display name for the created record
+                record_name = _get_record_name(odoo, model, record_id)
+
                 logger.info(f"Successfully created {model} record with ID: {record_id}")
-                audit_log(
-                    action="create_record_success",
+
+                # Log to JSONL audit
+                audit_log_json(
+                    action="create",
+                    model=model,
+                    record_id=record_id,
+                    record_name=record_name,
                     user=user,
-                    details={"model": model, "record_id": record_id}
+                    values=values,
                 )
+
                 return CreateRecordResponse(
                     success=True,
                     record_id=record_id
@@ -130,11 +156,6 @@ def register_tools(mcp_server):
             else:
                 error_msg = f"Failed to create {model} record: No ID returned"
                 logger.error(error_msg)
-                audit_log(
-                    action="create_record_failed",
-                    user=user,
-                    details={"model": model, "error": error_msg}
-                )
                 return CreateRecordResponse(
                     success=False,
                     error=error_msg
@@ -143,11 +164,6 @@ def register_tools(mcp_server):
         except Exception as e:
             error_msg = f"Error creating {model} record: {str(e)}"
             logger.error(error_msg)
-            audit_log(
-                action="create_record_error",
-                user=user,
-                details={"model": model, "error": str(e)}
-            )
             return CreateRecordResponse(
                 success=False,
                 error=str(e)
@@ -183,31 +199,41 @@ def register_tools(mcp_server):
 
         try:
             logger.info(f"Updating {model} record {record_id}: {values}")
-            audit_log(
-                action="update_record_attempt",
-                user=user,
-                details={"model": model, "record_id": record_id, "values": str(values)}
-            )
+
+            # Get old values before update for audit trail
+            fields_to_read = list(values.keys()) + ["display_name", "name"]
+            old_data = _get_old_values(odoo, model, record_id, fields_to_read)
+            record_name = old_data.get("display_name") or old_data.get("name") or f"#{record_id}"
 
             # Execute write method
             result = odoo.execute_method(model, "write", [[record_id], values])
 
             if result:
                 logger.info(f"Successfully updated {model} record {record_id}")
-                audit_log(
-                    action="update_record_success",
+
+                # Build changes dict with old/new values
+                changes = {}
+                for field, new_value in values.items():
+                    old_value = old_data.get(field)
+                    # Handle Many2one fields (tuples like (id, name))
+                    if isinstance(old_value, (list, tuple)) and len(old_value) == 2:
+                        old_value = old_value[1]  # Get display name
+                    changes[field] = {"old": old_value, "new": new_value}
+
+                # Log to JSONL audit
+                audit_log_json(
+                    action="update",
+                    model=model,
+                    record_id=record_id,
+                    record_name=record_name,
                     user=user,
-                    details={"model": model, "record_id": record_id}
+                    changes=changes,
                 )
+
                 return UpdateRecordResponse(success=True)
             else:
                 error_msg = f"Failed to update {model} record {record_id}"
                 logger.error(error_msg)
-                audit_log(
-                    action="update_record_failed",
-                    user=user,
-                    details={"model": model, "record_id": record_id, "error": error_msg}
-                )
                 return UpdateRecordResponse(
                     success=False,
                     error=error_msg
@@ -216,11 +242,6 @@ def register_tools(mcp_server):
         except Exception as e:
             error_msg = f"Error updating {model} record {record_id}: {str(e)}"
             logger.error(error_msg)
-            audit_log(
-                action="update_record_error",
-                user=user,
-                details={"model": model, "record_id": record_id, "error": str(e)}
-            )
             return UpdateRecordResponse(
                 success=False,
                 error=str(e)
@@ -253,31 +274,38 @@ def register_tools(mcp_server):
 
         try:
             logger.warning(f"Deleting {model} record {record_id}")
-            audit_log(
-                action="delete_record_attempt",
-                user=user,
-                details={"model": model, "record_id": record_id}
-            )
+
+            # Get record data before deletion for audit trail
+            old_data = _get_old_values(odoo, model, record_id, ["display_name", "name"])
+            record_name = old_data.get("display_name") or old_data.get("name") or f"#{record_id}"
+
+            # Try to get all field values for complete audit
+            try:
+                full_data = odoo.search_read(model, [["id", "=", record_id]], [], limit=1)
+                values_before_delete = full_data[0] if full_data else old_data
+            except Exception:
+                values_before_delete = old_data
 
             # Execute unlink method
             result = odoo.execute_method(model, "unlink", [[record_id]])
 
             if result:
                 logger.warning(f"Successfully deleted {model} record {record_id}")
-                audit_log(
-                    action="delete_record_success",
+
+                # Log to JSONL audit
+                audit_log_json(
+                    action="delete",
+                    model=model,
+                    record_id=record_id,
+                    record_name=record_name,
                     user=user,
-                    details={"model": model, "record_id": record_id}
+                    values=values_before_delete,
                 )
+
                 return DeleteRecordResponse(success=True)
             else:
                 error_msg = f"Failed to delete {model} record {record_id}"
                 logger.error(error_msg)
-                audit_log(
-                    action="delete_record_failed",
-                    user=user,
-                    details={"model": model, "record_id": record_id, "error": error_msg}
-                )
                 return DeleteRecordResponse(
                     success=False,
                     error=error_msg
@@ -286,11 +314,6 @@ def register_tools(mcp_server):
         except Exception as e:
             error_msg = f"Error deleting {model} record {record_id}: {str(e)}"
             logger.error(error_msg)
-            audit_log(
-                action="delete_record_error",
-                user=user,
-                details={"model": model, "record_id": record_id, "error": str(e)}
-            )
             return DeleteRecordResponse(
                 success=False,
                 error=str(e)

@@ -4,11 +4,12 @@ Logging configuration for Odoo AI Agent
 import json
 import sys
 import time
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Dict, Generator, List, Optional, Union
 
 from loguru import logger
 
@@ -218,6 +219,178 @@ def get_session_logger(session_id: str, thread_id: Optional[str] = None):
     """
     set_session_context(session_id=session_id, thread_id=thread_id)
     return logger.bind(session_id=session_id[:8] if session_id else "-")
+
+
+# Path to JSONL audit log
+_audit_jsonl_path: Optional[Path] = None
+
+
+def get_audit_jsonl_path() -> Path:
+    """Get path to audit JSONL file"""
+    global _audit_jsonl_path
+    if _audit_jsonl_path is None:
+        settings = get_settings()
+        _audit_jsonl_path = Path(settings.log_file).parent / "audit.jsonl"
+    return _audit_jsonl_path
+
+
+def audit_log_json(
+    action: str,
+    model: str,
+    record_id: Optional[int] = None,
+    record_name: Optional[str] = None,
+    user: Optional[str] = None,
+    changes: Optional[Dict[str, Dict[str, Any]]] = None,
+    values: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Log an audit event in JSONL format for the admin UI.
+
+    Args:
+        action: Operation type ('create', 'update', 'delete')
+        model: Odoo model name (e.g., 'purchase.order')
+        record_id: ID of the affected record
+        record_name: Display name of the record (e.g., 'PO00042')
+        user: User who performed the action
+        changes: For updates - dict of {field: {old: ..., new: ...}}
+        values: For create/delete - the record values
+
+    Returns:
+        The generated audit entry ID
+    """
+    context = get_session_context()
+
+    entry_id = str(uuid.uuid4())
+    entry = {
+        "id": entry_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "action": action,
+        "model": model,
+        "record_id": record_id,
+        "record_name": record_name,
+        "user": user or "system",
+        "session_id": context.get("session_id"),
+        "thread_id": context.get("thread_id"),
+        "changes": changes,
+        "values": values,
+    }
+
+    # Write to JSONL file
+    audit_path = get_audit_jsonl_path()
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(audit_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+
+    # Also log to standard audit log for backwards compatibility
+    logger.bind(audit=True).info(
+        f"action={action} | model={model} | record_id={record_id} | user={user}"
+    )
+
+    return entry_id
+
+
+def read_audit_log(
+    limit: int = 50,
+    offset: int = 0,
+    action_filter: Optional[str] = None,
+    model_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Read audit log entries from JSONL file.
+
+    Args:
+        limit: Maximum number of entries to return
+        offset: Number of entries to skip
+        action_filter: Filter by action type (create/update/delete)
+        model_filter: Filter by model name
+        date_from: Filter entries from this date (ISO format)
+        date_to: Filter entries until this date (ISO format)
+
+    Returns:
+        List of audit entries, newest first
+    """
+    audit_path = get_audit_jsonl_path()
+
+    if not audit_path.exists():
+        return []
+
+    entries = []
+    with open(audit_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+
+                # Apply filters
+                if action_filter and entry.get("action") != action_filter:
+                    continue
+                if model_filter and entry.get("model") != model_filter:
+                    continue
+                if date_from:
+                    entry_date = entry.get("timestamp", "")[:10]
+                    if entry_date < date_from:
+                        continue
+                if date_to:
+                    entry_date = entry.get("timestamp", "")[:10]
+                    if entry_date > date_to:
+                        continue
+
+                entries.append(entry)
+            except json.JSONDecodeError:
+                continue
+
+    # Sort by timestamp descending (newest first)
+    entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+    # Apply pagination
+    return entries[offset:offset + limit]
+
+
+def get_audit_models() -> List[str]:
+    """Get list of unique models in audit log"""
+    audit_path = get_audit_jsonl_path()
+
+    if not audit_path.exists():
+        return []
+
+    models = set()
+    with open(audit_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                if entry.get("model"):
+                    models.add(entry["model"])
+            except json.JSONDecodeError:
+                continue
+
+    return sorted(models)
+
+
+def count_audit_entries(
+    action_filter: Optional[str] = None,
+    model_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+) -> int:
+    """Count audit log entries matching filters"""
+    # Reuse read function but get all entries for count
+    entries = read_audit_log(
+        limit=100000,
+        offset=0,
+        action_filter=action_filter,
+        model_filter=model_filter,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return len(entries)
 
 
 @contextmanager

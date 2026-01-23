@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Log - Odoo AI Agent</title>
+    <style>
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3d3d3d;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-color: #404040;
+            --accent-green: #4caf50;
+            --accent-yellow: #ff9800;
+            --accent-red: #f44336;
+            --accent-blue: #2196f3;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .back-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        select, input[type="date"] {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1976d2;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: #4d4d4d;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        tr.expanded {
+            background: var(--bg-secondary);
+        }
+
+        .action-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .action-create {
+            background: rgba(76, 175, 80, 0.2);
+            color: var(--accent-green);
+        }
+
+        .action-update {
+            background: rgba(255, 152, 0, 0.2);
+            color: var(--accent-yellow);
+        }
+
+        .action-delete {
+            background: rgba(244, 67, 54, 0.2);
+            color: var(--accent-red);
+        }
+
+        .model-name {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            color: var(--accent-blue);
+        }
+
+        .record-link {
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .record-link:hover {
+            text-decoration: underline;
+        }
+
+        .changes-preview {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .timestamp {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .details-row {
+            display: none;
+        }
+
+        .details-row.visible {
+            display: table-row;
+        }
+
+        .details-content {
+            padding: 15px;
+            background: var(--bg-tertiary);
+        }
+
+        .details-content pre {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding: 15px 0;
+        }
+
+        .pagination-info {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .pagination-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .change-item {
+            margin-bottom: 8px;
+        }
+
+        .change-field {
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+
+        .change-old {
+            color: var(--accent-red);
+            text-decoration: line-through;
+        }
+
+        .change-new {
+            color: var(--accent-green);
+        }
+
+        .session-id {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .session-id:hover {
+            color: var(--accent-blue);
+        }
+
+        .copy-toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--accent-green);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                Audit Log
+            </h1>
+            <a href="/" class="back-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                Back to Chat
+            </a>
+        </header>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Action</label>
+                <select id="filterAction">
+                    <option value="">All Actions</option>
+                    <option value="create">Create</option>
+                    <option value="update">Update</option>
+                    <option value="delete">Delete</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Model</label>
+                <select id="filterModel">
+                    <option value="">All Models</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>From Date</label>
+                <input type="date" id="filterDateFrom">
+            </div>
+            <div class="filter-group">
+                <label>To Date</label>
+                <input type="date" id="filterDateTo">
+            </div>
+            <div class="filter-group" style="justify-content: flex-end;">
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+                    <button class="btn btn-primary" onclick="loadAuditLog()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 5px;">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Model</th>
+                        <th>Record</th>
+                        <th>User</th>
+                        <th>Changes</th>
+                    </tr>
+                </thead>
+                <tbody id="auditTableBody">
+                    <tr>
+                        <td colspan="6" class="loading">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <div class="pagination-info" id="paginationInfo">
+                Showing 0 entries
+            </div>
+            <div class="pagination-controls">
+                <button class="btn btn-secondary" id="prevBtn" onclick="prevPage()" disabled>Previous</button>
+                <button class="btn btn-secondary" id="nextBtn" onclick="nextPage()" disabled>Next</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="copy-toast" id="copyToast">Session ID copied!</div>
+
+    <script>
+        let currentOffset = 0;
+        const limit = 50;
+        let totalEntries = 0;
+
+        // Format timestamp
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+
+        // Get action badge HTML
+        function getActionBadge(action) {
+            const icons = {
+                create: '&#x2795;',
+                update: '&#x270F;',
+                delete: '&#x1F5D1;'
+            };
+            return `<span class="action-badge action-${action}">${icons[action] || ''} ${action}</span>`;
+        }
+
+        // Format changes for preview
+        function formatChangesPreview(entry) {
+            if (entry.action === 'create' && entry.values) {
+                const keys = Object.keys(entry.values).slice(0, 3);
+                return keys.map(k => `${k}: ${JSON.stringify(entry.values[k])}`).join(', ');
+            }
+            if (entry.action === 'update' && entry.changes) {
+                const keys = Object.keys(entry.changes).slice(0, 2);
+                return keys.map(k => {
+                    const c = entry.changes[k];
+                    return `${k}: ${c.old} → ${c.new}`;
+                }).join(', ');
+            }
+            if (entry.action === 'delete' && entry.values) {
+                return `Deleted record with ${Object.keys(entry.values).length} fields`;
+            }
+            return '-';
+        }
+
+        // Format changes for details view
+        function formatChangesDetails(entry) {
+            if (entry.action === 'create' && entry.values) {
+                return `<strong>Created with values:</strong>\n<pre>${JSON.stringify(entry.values, null, 2)}</pre>`;
+            }
+            if (entry.action === 'update' && entry.changes) {
+                let html = '<strong>Changed fields:</strong><br>';
+                for (const [field, change] of Object.entries(entry.changes)) {
+                    html += `<div class="change-item">
+                        <span class="change-field">${field}:</span>
+                        <span class="change-old">${JSON.stringify(change.old)}</span>
+                        →
+                        <span class="change-new">${JSON.stringify(change.new)}</span>
+                    </div>`;
+                }
+                return html;
+            }
+            if (entry.action === 'delete' && entry.values) {
+                return `<strong>Deleted record data:</strong>\n<pre>${JSON.stringify(entry.values, null, 2)}</pre>`;
+            }
+            return 'No details available';
+        }
+
+        // Copy session ID to clipboard
+        function copySessionId(sessionId) {
+            navigator.clipboard.writeText(sessionId).then(() => {
+                const toast = document.getElementById('copyToast');
+                toast.style.display = 'block';
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                }, 2000);
+            });
+        }
+
+        // Toggle row details
+        function toggleDetails(rowId) {
+            const detailsRow = document.getElementById(`details-${rowId}`);
+            const mainRow = document.getElementById(`row-${rowId}`);
+
+            if (detailsRow.classList.contains('visible')) {
+                detailsRow.classList.remove('visible');
+                mainRow.classList.remove('expanded');
+            } else {
+                // Close all other details
+                document.querySelectorAll('.details-row.visible').forEach(r => {
+                    r.classList.remove('visible');
+                });
+                document.querySelectorAll('tr.expanded').forEach(r => {
+                    r.classList.remove('expanded');
+                });
+
+                detailsRow.classList.add('visible');
+                mainRow.classList.add('expanded');
+            }
+        }
+
+        // Load audit log entries
+        async function loadAuditLog() {
+            const tbody = document.getElementById('auditTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+
+            const params = new URLSearchParams({
+                limit: limit,
+                offset: currentOffset
+            });
+
+            const action = document.getElementById('filterAction').value;
+            const model = document.getElementById('filterModel').value;
+            const dateFrom = document.getElementById('filterDateFrom').value;
+            const dateTo = document.getElementById('filterDateTo').value;
+
+            if (action) params.append('action', action);
+            if (model) params.append('model', model);
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+
+            try {
+                const response = await fetch(`/admin/api/audit?${params}`);
+                const data = await response.json();
+
+                totalEntries = data.total;
+                updatePagination();
+
+                if (data.entries.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                </svg>
+                                <p>No audit entries found</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = data.entries.map((entry, index) => `
+                    <tr id="row-${index}" onclick="toggleDetails(${index})" style="cursor: pointer;">
+                        <td class="timestamp">${formatTime(entry.timestamp)}</td>
+                        <td>${getActionBadge(entry.action)}</td>
+                        <td><span class="model-name">${entry.model}</span></td>
+                        <td>
+                            <span class="record-link">${entry.record_name || '#' + entry.record_id}</span>
+                            <br><small style="color: var(--text-secondary);">ID: ${entry.record_id}</small>
+                        </td>
+                        <td>${entry.user}</td>
+                        <td>
+                            <div class="changes-preview">${formatChangesPreview(entry)}</div>
+                            ${entry.session_id ? `<div class="session-id" onclick="event.stopPropagation(); copySessionId('${entry.session_id}')" title="Click to copy">Session: ${entry.session_id.slice(0, 8)}...</div>` : ''}
+                        </td>
+                    </tr>
+                    <tr id="details-${index}" class="details-row">
+                        <td colspan="6">
+                            <div class="details-content">
+                                ${formatChangesDetails(entry)}
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <p>Error loading audit log: ${error.message}</p>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Load models for filter dropdown
+        async function loadModels() {
+            try {
+                const response = await fetch('/admin/api/audit/models');
+                const data = await response.json();
+
+                const select = document.getElementById('filterModel');
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading models:', error);
+            }
+        }
+
+        // Pagination
+        function updatePagination() {
+            const info = document.getElementById('paginationInfo');
+            const start = currentOffset + 1;
+            const end = Math.min(currentOffset + limit, totalEntries);
+            info.textContent = `Showing ${start}-${end} of ${totalEntries} entries`;
+
+            document.getElementById('prevBtn').disabled = currentOffset === 0;
+            document.getElementById('nextBtn').disabled = currentOffset + limit >= totalEntries;
+        }
+
+        function prevPage() {
+            if (currentOffset > 0) {
+                currentOffset -= limit;
+                loadAuditLog();
+            }
+        }
+
+        function nextPage() {
+            if (currentOffset + limit < totalEntries) {
+                currentOffset += limit;
+                loadAuditLog();
+            }
+        }
+
+        // Reset filters
+        function resetFilters() {
+            document.getElementById('filterAction').value = '';
+            document.getElementById('filterModel').value = '';
+            document.getElementById('filterDateFrom').value = '';
+            document.getElementById('filterDateTo').value = '';
+            currentOffset = 0;
+            loadAuditLog();
+        }
+
+        // Event listeners for filters
+        document.getElementById('filterAction').addEventListener('change', () => {
+            currentOffset = 0;
+            loadAuditLog();
+        });
+        document.getElementById('filterModel').addEventListener('change', () => {
+            currentOffset = 0;
+            loadAuditLog();
+        });
+        document.getElementById('filterDateFrom').addEventListener('change', () => {
+            currentOffset = 0;
+            loadAuditLog();
+        });
+        document.getElementById('filterDateTo').addEventListener('change', () => {
+            currentOffset = 0;
+            loadAuditLog();
+        });
+
+        // Initial load
+        loadModels();
+        loadAuditLog();
+    </script>
+</body>
+</html>
