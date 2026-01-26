@@ -269,16 +269,50 @@
             color: var(--text-muted);
             margin-top: 0.25rem;
         }
+
+        .admin-nav {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem 2rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        .nav-link.active {
+            color: var(--accent);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .nav-home {
+            margin-left: auto;
+        }
     </style>
 </head>
 <body>
+    <nav class="admin-nav">
+        <a href="/admin/settings" class="nav-link active">Settings</a>
+        <a href="/admin/users" class="nav-link">Users</a>
+        <a href="/admin/api-keys" class="nav-link">API Keys</a>
+        <a href="/admin/audit" class="nav-link">Audit Log</a>
+        <a href="/" class="nav-link nav-home">Chat</a>
+    </nav>
     <div class="container">
         <header>
             <h1>Settings</h1>
-            <nav class="nav-links">
-                <a href="/admin/audit">Audit Log</a>
-                <a href="/">Chat</a>
-            </nav>
         </header>
 
         <div id="alert-success" class="alert alert-success"></div>
