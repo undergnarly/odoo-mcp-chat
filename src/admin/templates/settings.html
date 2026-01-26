@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Odoo AI Agent</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #1f2937;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --border: #374151;
+            --input-bg: #111827;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.375rem;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.625rem 0.875rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        input[type="checkbox"] {
+            width: 1.125rem;
+            height: 1.125rem;
+            accent-color: var(--accent);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .btn {
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .test-result {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.813rem;
+        }
+
+        .test-result.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .test-result.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .help-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Settings</h1>
+            <nav class="nav-links">
+                <a href="/admin/audit">Audit Log</a>
+                <a href="/">Chat</a>
+            </nav>
+        </header>
+
+        <div id="alert-success" class="alert alert-success"></div>
+        <div id="alert-error" class="alert alert-error"></div>
+
+        <form id="settings-form">
+            <!-- Odoo Connection -->
+            <div class="card">
+                <h2 class="card-title">Odoo Connection</h2>
+                <div class="form-group">
+                    <label for="ODOO_URL">Odoo URL</label>
+                    <input type="text" id="ODOO_URL" name="ODOO_URL" placeholder="https://your-odoo-instance.com" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ODOO_DB">Database</label>
+                        <input type="text" id="ODOO_DB" name="ODOO_DB" placeholder="database_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ODOO_TIMEOUT">Timeout (seconds)</label>
+                        <input type="number" id="ODOO_TIMEOUT" name="ODOO_TIMEOUT" value="30" min="5" max="120">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ODOO_USERNAME">Username</label>
+                        <input type="text" id="ODOO_USERNAME" name="ODOO_USERNAME" placeholder="admin" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ODOO_PASSWORD">Password / API Key</label>
+                        <input type="password" id="ODOO_PASSWORD" name="ODOO_PASSWORD" placeholder="password or API key" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <button type="button" class="btn btn-secondary" id="test-odoo-btn">Test Connection</button>
+                    <div id="odoo-test-result" class="test-result" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- LLM Provider -->
+            <div class="card">
+                <h2 class="card-title">LLM Provider</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="LLM_MODEL">Model</label>
+                        <input type="text" id="LLM_MODEL" name="LLM_MODEL" placeholder="gpt-4o">
+                        <div class="help-text">e.g., gpt-4o, gpt-4-turbo, gpt-3.5-turbo</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="LLM_TEMPERATURE">Temperature</label>
+                        <input type="number" id="LLM_TEMPERATURE" name="LLM_TEMPERATURE" value="0.1" min="0" max="1" step="0.1">
+                        <div class="help-text">0 = deterministic, 1 = creative</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="OPENAI_API_KEY">OpenAI API Key</label>
+                    <input type="password" id="OPENAI_API_KEY" name="OPENAI_API_KEY" placeholder="sk-...">
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="card">
+                <h2 class="card-title">Security</h2>
+                <div class="form-group">
+                    <label for="AGENT_API_KEY">Agent API Key</label>
+                    <input type="password" id="AGENT_API_KEY" name="AGENT_API_KEY" placeholder="API key for external agents">
+                    <div class="help-text">Required for /api/v1/chat endpoint</div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="READ_ONLY_MODE" name="READ_ONLY_MODE">
+                        <label for="READ_ONLY_MODE">Read-Only Mode</label>
+                    </div>
+                    <div class="help-text">Disable all write operations (create, update, delete)</div>
+                </div>
+            </div>
+
+            <!-- Logging -->
+            <div class="card">
+                <h2 class="card-title">Logging</h2>
+                <div class="form-group">
+                    <label for="LOG_LEVEL">Log Level</label>
+                    <select id="LOG_LEVEL" name="LOG_LEVEL">
+                        <option value="DEBUG">DEBUG</option>
+                        <option value="INFO" selected>INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button type="button" class="btn btn-danger" id="reset-btn">Reset to .env</button>
+                <button type="submit" class="btn btn-primary" id="save-btn">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('settings-form');
+        const saveBtn = document.getElementById('save-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const testOdooBtn = document.getElementById('test-odoo-btn');
+        const alertSuccess = document.getElementById('alert-success');
+        const alertError = document.getElementById('alert-error');
+        const odooTestResult = document.getElementById('odoo-test-result');
+
+        // Load settings on page load
+        async function loadSettings() {
+            try {
+                const response = await fetch('/admin/api/settings');
+                const data = await response.json();
+
+                if (data.settings) {
+                    for (const [key, value] of Object.entries(data.settings)) {
+                        const input = document.getElementById(key);
+                        if (input) {
+                            if (input.type === 'checkbox') {
+                                input.checked = value === 'true' || value === true;
+                            } else {
+                                input.value = value || '';
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                showAlert('error', 'Failed to load settings: ' + error.message);
+            }
+        }
+
+        // Save settings
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="loading"></span> Saving...';
+
+            try {
+                const formData = new FormData(form);
+                const settings = {};
+
+                for (const [key, value] of formData.entries()) {
+                    settings[key] = value;
+                }
+
+                // Handle checkbox (not in FormData if unchecked)
+                settings['READ_ONLY_MODE'] = document.getElementById('READ_ONLY_MODE').checked ? 'true' : 'false';
+
+                const response = await fetch('/admin/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('success', data.message + ' New sessions will use updated settings.');
+                } else {
+                    showAlert('error', data.detail || 'Failed to save settings');
+                }
+            } catch (error) {
+                showAlert('error', 'Failed to save settings: ' + error.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save Settings';
+            }
+        });
+
+        // Reset settings
+        resetBtn.addEventListener('click', async () => {
+            if (!confirm('Reset all settings to .env defaults? This cannot be undone.')) {
+                return;
+            }
+
+            resetBtn.disabled = true;
+            resetBtn.innerHTML = '<span class="loading"></span> Resetting...';
+
+            try {
+                const response = await fetch('/admin/api/settings', {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('success', data.message);
+                    await loadSettings();
+                } else {
+                    showAlert('error', data.detail || 'Failed to reset settings');
+                }
+            } catch (error) {
+                showAlert('error', 'Failed to reset settings: ' + error.message);
+            } finally {
+                resetBtn.disabled = false;
+                resetBtn.textContent = 'Reset to .env';
+            }
+        });
+
+        // Test Odoo connection
+        testOdooBtn.addEventListener('click', async () => {
+            testOdooBtn.disabled = true;
+            testOdooBtn.innerHTML = '<span class="loading"></span> Testing...';
+            odooTestResult.style.display = 'none';
+
+            try {
+                const settings = {
+                    ODOO_URL: document.getElementById('ODOO_URL').value,
+                    ODOO_DB: document.getElementById('ODOO_DB').value,
+                    ODOO_USERNAME: document.getElementById('ODOO_USERNAME').value,
+                    ODOO_PASSWORD: document.getElementById('ODOO_PASSWORD').value,
+                };
+
+                const response = await fetch('/admin/api/settings/test-odoo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings })
+                });
+
+                const data = await response.json();
+
+                odooTestResult.textContent = data.message;
+                odooTestResult.className = 'test-result ' + (data.success ? 'success' : 'error');
+                odooTestResult.style.display = 'block';
+            } catch (error) {
+                odooTestResult.textContent = 'Test failed: ' + error.message;
+                odooTestResult.className = 'test-result error';
+                odooTestResult.style.display = 'block';
+            } finally {
+                testOdooBtn.disabled = false;
+                testOdooBtn.textContent = 'Test Connection';
+            }
+        });
+
+        // Show alert
+        function showAlert(type, message) {
+            const alert = type === 'success' ? alertSuccess : alertError;
+            const other = type === 'success' ? alertError : alertSuccess;
+
+            other.classList.remove('show');
+            alert.textContent = message;
+            alert.classList.add('show');
+
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
+        // Load settings on page load
+        loadSettings();
+    </script>
+</body>
+</html>

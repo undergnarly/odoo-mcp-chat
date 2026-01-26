@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Keys - Odoo AI Agent</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #1f2937;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --border: #374151;
+            --input-bg: #111827;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.375rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.625rem 0.875rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto;
+            gap: 1rem;
+            align-items: end;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .btn {
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            background: var(--bg-secondary);
+        }
+
+        tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .key-prefix {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.813rem;
+            color: var(--accent);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .status-revoked {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .status-expired {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .permission-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            margin-bottom: 1rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Key display */
+        .key-display {
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin: 1rem 0;
+            position: relative;
+        }
+
+        .key-display code {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.875rem;
+            word-break: break-all;
+            color: var(--success);
+        }
+
+        .key-display .copy-btn {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .warning-text {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid var(--warning);
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            color: var(--warning);
+            font-size: 0.875rem;
+            margin-top: 1rem;
+        }
+
+        .warning-text svg {
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+
+        /* Usage table */
+        .usage-table {
+            font-size: 0.813rem;
+        }
+
+        .usage-table th, .usage-table td {
+            padding: 0.5rem 0.75rem;
+        }
+
+        .method-badge {
+            display: inline-flex;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-size: 0.688rem;
+            font-weight: 600;
+        }
+
+        .method-get {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .method-post {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--accent);
+        }
+
+        .method-delete {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .status-success {
+            color: var(--success);
+        }
+
+        .status-error {
+            color: var(--error);
+        }
+
+        .help-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>API Keys</h1>
+            <nav class="nav-links">
+                <a href="/admin/audit">Audit Log</a>
+                <a href="/admin/settings">Settings</a>
+                <a href="/">Chat</a>
+            </nav>
+        </header>
+
+        <div id="alert-success" class="alert alert-success"></div>
+        <div id="alert-error" class="alert alert-error"></div>
+
+        <!-- Create Key Form -->
+        <div class="card">
+            <h2 class="card-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Create New API Key
+            </h2>
+            <form id="create-key-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="key-name">Name</label>
+                        <input type="text" id="key-name" placeholder="e.g., Production API Key" required>
+                        <div class="help-text">A descriptive name to identify this key</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="key-permissions">Permissions</label>
+                        <select id="key-permissions">
+                            <option value="full">Full Access</option>
+                            <option value="readonly">Read Only</option>
+                            <option value="chat_only">Chat Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="key-expires">Expires In (days)</label>
+                        <input type="number" id="key-expires" placeholder="Optional" min="1" max="365">
+                        <div class="help-text">Leave empty for no expiration</div>
+                    </div>
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary" id="create-btn">Create Key</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Keys Table -->
+        <div class="card">
+            <h2 class="card-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                </svg>
+                API Keys
+            </h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Key Prefix</th>
+                            <th>Permissions</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keys-table-body">
+                        <tr>
+                            <td colspan="7" class="empty-state">
+                                <span class="loading"></span>
+                                <p>Loading API keys...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Created Modal -->
+    <div class="modal-overlay" id="key-created-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">API Key Created</h3>
+                <button class="modal-close" onclick="closeModal('key-created-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Your new API key has been created. Please copy it now - you will not be able to see it again.</p>
+                <div class="key-display">
+                    <code id="new-key-value"></code>
+                    <button class="btn btn-secondary btn-sm copy-btn" onclick="copyKey()">Copy</button>
+                </div>
+                <div class="warning-text">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    This key will only be shown once. Store it securely.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('key-created-modal')">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usage Modal -->
+    <div class="modal-overlay" id="usage-modal">
+        <div class="modal" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 class="modal-title">API Key Usage - <span id="usage-key-name"></span></h3>
+                <button class="modal-close" onclick="closeModal('usage-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-container">
+                    <table class="usage-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Method</th>
+                                <th>Endpoint</th>
+                                <th>IP Address</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usage-table-body">
+                            <tr>
+                                <td colspan="5" class="empty-state">
+                                    <span class="loading"></span>
+                                    <p>Loading usage data...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('usage-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revoke Confirmation Modal -->
+    <div class="modal-overlay" id="revoke-modal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Revoke API Key</h3>
+                <button class="modal-close" onclick="closeModal('revoke-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to revoke the key "<strong id="revoke-key-name"></strong>"?</p>
+                <p style="margin-top: 0.5rem; color: var(--text-muted); font-size: 0.875rem;">
+                    This action cannot be undone. Any applications using this key will immediately lose access.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('revoke-modal')">Cancel</button>
+                <button class="btn btn-danger" id="confirm-revoke-btn">Revoke Key</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentKeyToRevoke = null;
+
+        // Format date
+        function formatDate(isoString) {
+            if (!isoString) return 'Never';
+            const date = new Date(isoString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+
+        // Get status badge
+        function getStatusBadge(key) {
+            if (key.revoked) {
+                return '<span class="status-badge status-revoked">Revoked</span>';
+            }
+            if (key.expires_at && new Date(key.expires_at) < new Date()) {
+                return '<span class="status-badge status-expired">Expired</span>';
+            }
+            return '<span class="status-badge status-active">Active</span>';
+        }
+
+        // Get method badge
+        function getMethodBadge(method) {
+            const cls = method.toLowerCase();
+            return `<span class="method-badge method-${cls}">${method}</span>`;
+        }
+
+        // Load API keys
+        async function loadKeys() {
+            const tbody = document.getElementById('keys-table-body');
+
+            try {
+                const response = await fetch('/admin/api/keys');
+                const data = await response.json();
+
+                if (data.keys.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="empty-state">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                                </svg>
+                                <p>No API keys found. Create one above.</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = data.keys.map(key => `
+                    <tr>
+                        <td><strong>${escapeHtml(key.name)}</strong></td>
+                        <td><span class="key-prefix">${key.prefix}...</span></td>
+                        <td><span class="permission-badge">${key.permissions}</span></td>
+                        <td>${formatDate(key.created_at)}</td>
+                        <td>${key.expires_at ? formatDate(key.expires_at) : 'Never'}</td>
+                        <td>${getStatusBadge(key)}</td>
+                        <td class="actions-cell">
+                            <button class="btn btn-secondary btn-sm" onclick="viewUsage('${key.id}', '${escapeHtml(key.name)}')">Usage</button>
+                            ${!key.revoked ? `<button class="btn btn-danger btn-sm" onclick="confirmRevoke('${key.id}', '${escapeHtml(key.name)}')">Revoke</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <p style="color: var(--error);">Error loading API keys: ${error.message}</p>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Create key
+        document.getElementById('create-key-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const createBtn = document.getElementById('create-btn');
+            createBtn.disabled = true;
+            createBtn.innerHTML = '<span class="loading"></span>';
+
+            try {
+                const name = document.getElementById('key-name').value.trim();
+                const permissions = document.getElementById('key-permissions').value;
+                const expiresInput = document.getElementById('key-expires').value;
+                const expiresInDays = expiresInput ? parseInt(expiresInput) : null;
+
+                const response = await fetch('/admin/api/keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, permissions, expires_in_days: expiresInDays })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('new-key-value').textContent = data.key;
+                    openModal('key-created-modal');
+                    document.getElementById('create-key-form').reset();
+                    loadKeys();
+                } else {
+                    showAlert('error', data.detail || 'Failed to create API key');
+                }
+            } catch (error) {
+                showAlert('error', 'Failed to create API key: ' + error.message);
+            } finally {
+                createBtn.disabled = false;
+                createBtn.textContent = 'Create Key';
+            }
+        });
+
+        // Copy key to clipboard
+        function copyKey() {
+            const keyValue = document.getElementById('new-key-value').textContent;
+            navigator.clipboard.writeText(keyValue).then(() => {
+                showAlert('success', 'API key copied to clipboard');
+            }).catch(err => {
+                showAlert('error', 'Failed to copy key');
+            });
+        }
+
+        // View usage
+        async function viewUsage(keyId, keyName) {
+            document.getElementById('usage-key-name').textContent = keyName;
+            const tbody = document.getElementById('usage-table-body');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="empty-state">
+                        <span class="loading"></span>
+                        <p>Loading usage data...</p>
+                    </td>
+                </tr>
+            `;
+            openModal('usage-modal');
+
+            try {
+                const response = await fetch(`/admin/api/keys/${keyId}/usage`);
+                const data = await response.json();
+
+                if (data.usage.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="empty-state">
+                                <p>No usage recorded for this key yet.</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                tbody.innerHTML = data.usage.map(entry => `
+                    <tr>
+                        <td>${formatDate(entry.timestamp)}</td>
+                        <td>${getMethodBadge(entry.method)}</td>
+                        <td>${escapeHtml(entry.endpoint)}</td>
+                        <td>${entry.ip_address}</td>
+                        <td class="${entry.status >= 200 && entry.status < 300 ? 'status-success' : 'status-error'}">${entry.status}</td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="empty-state">
+                            <p style="color: var(--error);">Error loading usage: ${error.message}</p>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Confirm revoke
+        function confirmRevoke(keyId, keyName) {
+            currentKeyToRevoke = keyId;
+            document.getElementById('revoke-key-name').textContent = keyName;
+            openModal('revoke-modal');
+        }
+
+        // Revoke key
+        document.getElementById('confirm-revoke-btn').addEventListener('click', async () => {
+            if (!currentKeyToRevoke) return;
+
+            const btn = document.getElementById('confirm-revoke-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>';
+
+            try {
+                const response = await fetch(`/admin/api/keys/${currentKeyToRevoke}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert('success', 'API key revoked successfully');
+                    closeModal('revoke-modal');
+                    loadKeys();
+                } else {
+                    showAlert('error', data.detail || 'Failed to revoke API key');
+                }
+            } catch (error) {
+                showAlert('error', 'Failed to revoke API key: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Revoke Key';
+                currentKeyToRevoke = null;
+            }
+        });
+
+        // Modal helpers
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('show');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+        }
+
+        // Close modal on outside click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('show');
+                }
+            });
+        });
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Show alert
+        function showAlert(type, message) {
+            const alertSuccess = document.getElementById('alert-success');
+            const alertError = document.getElementById('alert-error');
+            const alert = type === 'success' ? alertSuccess : alertError;
+            const other = type === 'success' ? alertError : alertSuccess;
+
+            other.classList.remove('show');
+            alert.textContent = message;
+            alert.classList.add('show');
+
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
+        // Initial load
+        loadKeys();
+    </script>
+</body>
+</html>

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Users - Odoo AI Agent</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #1f2937;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --border: #374151;
+            --input-bg: #111827;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            font-size: 0.875rem;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .role-select {
+            padding: 0.375rem 0.625rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 0.375rem;
+            color: var(--text-primary);
+            font-size: 0.813rem;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .role-select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .role-select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+        }
+
+        .email-cell {
+            color: var(--text-secondary);
+        }
+
+        .date-cell {
+            color: var(--text-muted);
+            font-size: 0.813rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+
+        .loading-state .loading {
+            width: 2rem;
+            height: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            th, td {
+                padding: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Users</h1>
+            <nav class="nav-links">
+                <a href="/admin/audit">Audit Log</a>
+                <a href="/admin/settings">Settings</a>
+                <a href="/">Chat</a>
+            </nav>
+        </header>
+
+        <div id="alert-success" class="alert alert-success"></div>
+        <div id="alert-error" class="alert alert-error"></div>
+
+        <div class="card">
+            <h2 class="card-title">User Management</h2>
+            <div id="users-container">
+                <div class="loading-state">
+                    <div class="loading"></div>
+                    <p>Loading users...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const usersContainer = document.getElementById('users-container');
+        const alertSuccess = document.getElementById('alert-success');
+        const alertError = document.getElementById('alert-error');
+
+        // Load users on page load
+        async function loadUsers() {
+            try {
+                const response = await fetch('/admin/api/users');
+                const data = await response.json();
+
+                if (data.users && data.users.length > 0) {
+                    renderUsersTable(data.users);
+                } else {
+                    usersContainer.innerHTML = '<div class="empty-state">No users found</div>';
+                }
+            } catch (error) {
+                showAlert('error', 'Failed to load users: ' + error.message);
+                usersContainer.innerHTML = '<div class="empty-state">Failed to load users</div>';
+            }
+        }
+
+        // Render users table
+        function renderUsersTable(users) {
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Created</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${users.map(user => `
+                            <tr data-username="${escapeHtml(user.username)}">
+                                <td>${escapeHtml(user.username)}</td>
+                                <td class="email-cell">${escapeHtml(user.email || '-')}</td>
+                                <td>
+                                    <select class="role-select" data-username="${escapeHtml(user.username)}" data-original-role="${escapeHtml(user.role || 'user')}">
+                                        <option value="user" ${(user.role === 'user' || !user.role) ? 'selected' : ''}>User</option>
+                                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                        <option value="readonly" ${user.role === 'readonly' ? 'selected' : ''}>Read-only</option>
+                                    </select>
+                                </td>
+                                <td class="date-cell">${formatDate(user.created_at)}</td>
+                                <td>
+                                    <span class="status-badge ${user.is_active ? 'status-active' : 'status-inactive'}">
+                                        ${user.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            usersContainer.innerHTML = html;
+
+            // Add event listeners to role selects
+            document.querySelectorAll('.role-select').forEach(select => {
+                select.addEventListener('change', handleRoleChange);
+            });
+        }
+
+        // Handle role change
+        async function handleRoleChange(event) {
+            const select = event.target;
+            const username = select.dataset.username;
+            const newRole = select.value;
+            const originalRole = select.dataset.originalRole;
+
+            select.disabled = true;
+
+            try {
+                const response = await fetch(`/admin/api/users/${encodeURIComponent(username)}/role`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: newRole })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    select.dataset.originalRole = newRole;
+                    showAlert('success', `Role updated for ${username}`);
+                } else {
+                    select.value = originalRole;
+                    showAlert('error', data.detail || 'Failed to update role');
+                }
+            } catch (error) {
+                select.value = originalRole;
+                showAlert('error', 'Failed to update role: ' + error.message);
+            } finally {
+                select.disabled = false;
+            }
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Show alert
+        function showAlert(type, message) {
+            const alert = type === 'success' ? alertSuccess : alertError;
+            const other = type === 'success' ? alertError : alertSuccess;
+
+            other.classList.remove('show');
+            alert.textContent = message;
+            alert.classList.add('show');
+
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
+        // Load users on page load
+        loadUsers();
+    </script>
+</body>
+</html>
