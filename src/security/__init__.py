@@ -1,4 +1,10 @@
 """Security module for Odoo AI Agent."""
+from src.security.api_keys import (
+    APIKeyManager,
+    KEY_PREFIX_LIVE,
+    KEY_PREFIX_TEST,
+    get_api_key_manager,
+)
 from src.security.auth import (
     get_current_user_from_session,
     get_user_role,
@@ -14,6 +20,11 @@ from src.security.vault import (
 )
 
 __all__ = [
+    # API Keys
+    "APIKeyManager",
+    "KEY_PREFIX_LIVE",
+    "KEY_PREFIX_TEST",
+    "get_api_key_manager",
     # Auth
     "get_current_user_from_session",
     "get_user_role",
