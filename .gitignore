@@ -73,6 +73,10 @@ dmypy.json
 # Redis
 dump.rdb
 
+# Encryption keys
+*.key
+data/encryption.key
+
 # Analysis temp (cloned repos for analysis)
 analysis_temp/
 
