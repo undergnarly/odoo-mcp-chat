@@ -321,13 +321,34 @@ async def on_message(message: cl.Message):
     if new_page is not None:
         query_ctx = cl.user_session.get("query_context")
         if query_ctx and new_page != query_ctx.get("current_page"):
+            # Fetch the requested page from Odoo with offset
+            odoo_client = cl.user_session.get("odoo_client")
+            if not odoo_client:
+                await send_assistant_message("Error: Odoo connection lost. Please refresh the page.")
+                return
+
+            offset = new_page * PAGE_SIZE
+            try:
+                page_results = odoo_client.search_read(
+                    model_name=query_ctx["model"],
+                    domain=query_ctx.get("domain", []),
+                    fields=query_ctx.get("fields"),
+                    limit=PAGE_SIZE,
+                    offset=offset,
+                    order="id desc",
+                )
+            except Exception as e:
+                logger.error(f"Pagination query error: {e}")
+                await send_assistant_message(f"Error loading page: {e}")
+                return
+
             query_ctx["current_page"] = new_page
             cl.user_session.set("query_context", query_ctx)
 
             total_pages = (query_ctx["total_count"] + PAGE_SIZE - 1) // PAGE_SIZE
             content = build_table_content(
                 query_ctx["model"],
-                query_ctx["results"],
+                page_results,
                 new_page,
                 query_ctx["total_count"]
             )
@@ -552,21 +573,22 @@ PAGE_SIZE = 10  # Records per page
 
 
 def build_table_content(model: str, results: list, page: int, total_count: int) -> str:
-    """Build table content for a specific page"""
-    start_idx = page * PAGE_SIZE
-    end_idx = start_idx + PAGE_SIZE
-    page_results = results[start_idx:end_idx] if len(results) > start_idx else results
+    """Build table content for a specific page.
 
+    Results are always a single page of records (PAGE_SIZE items max).
+    The page parameter is used only for display numbering.
+    """
     total_pages = (total_count + PAGE_SIZE - 1) // PAGE_SIZE if total_count else 1
+    start_idx = page * PAGE_SIZE
 
     # Build response content
     content = f"## Query Results: `{model}`\n\n"
     content += f"**Page {page + 1} of {total_pages}** | "
-    content += f"Showing records {start_idx + 1}-{min(start_idx + len(page_results), total_count)} of {total_count} total\n\n"
+    content += f"Showing records {start_idx + 1}-{min(start_idx + len(results), total_count)} of {total_count} total\n\n"
 
-    if page_results:
+    if results:
         # Get dynamic columns for this model
-        columns = get_display_columns(model, page_results)
+        columns = get_display_columns(model, results)
 
         # Build table header
         headers = [col[1] for col in columns]
@@ -574,7 +596,7 @@ def build_table_content(model: str, results: list, page: int, total_count: int) 
         content += "|---" + "|---" * len(columns) + "|\n"
 
         # Build table rows
-        for idx, record in enumerate(page_results, start_idx + 1):
+        for idx, record in enumerate(results, start_idx + 1):
             row_values = [f"**{idx}**"]
 
             for field_name, _ in columns:
@@ -583,6 +605,8 @@ def build_table_content(model: str, results: list, page: int, total_count: int) 
                 row_values.append(formatted)
 
             content += "| " + " | ".join(row_values) + " |\n"
+    else:
+        content += "No records on this page.\n"
 
     return content
 
@@ -605,16 +629,17 @@ async def handle_query_result(response: dict):
         await send_assistant_message(content)
         return
 
-    # Store query context for pagination
+    # Store query context for pagination (including query params for server-side pagination)
     query_context = {
         "model": model,
-        "results": results,
         "total_count": total_count,
         "current_page": 0,
+        "domain": response.get("domain", []),
+        "fields": response.get("fields"),
     }
     cl.user_session.set("query_context", query_context)
 
-    # Build first page
+    # Build first page (results already contain only one page of data)
     content = build_table_content(model, results, 0, total_count)
 
     # Add pagination info if there are more pages

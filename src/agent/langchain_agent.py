@@ -581,8 +581,8 @@ class OdooAgent:
             except Exception:
                 total_count = None
 
-            # Get requested limit (default 100 for pagination support)
-            limit = parameters.get("limit", 100)
+            # Fetch first page of results (UI handles pagination with offset)
+            limit = parameters.get("limit", 10)
 
             # Execute search with explicit fields
             with log_timing("odoo_search_read", model=model, limit=limit):
@@ -591,6 +591,7 @@ class OdooAgent:
                     domain=filters,  # Now guaranteed to be a list
                     fields=safe_fields,  # Only fetch safe fields
                     limit=limit,
+                    order="id desc",
                 )
 
             # Format results for display - INCLUDE ID for context resolution!
@@ -620,6 +621,8 @@ class OdooAgent:
                 "count": len(results),
                 "total_count": total_count,
                 "results": results,
+                "domain": filters,
+                "fields": safe_fields,
                 "content": content,
             }
 
